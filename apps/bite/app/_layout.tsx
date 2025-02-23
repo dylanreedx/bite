@@ -1,59 +1,79 @@
-import FontAwesome from '@expo/vector-icons/FontAwesome';
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
-import { useFonts } from 'expo-font';
-import { Stack } from 'expo-router';
+import {Stack} from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { useEffect } from 'react';
-import 'react-native-reanimated';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import {useEffect, useState} from 'react';
+import {View, ActivityIndicator} from 'react-native';
+import {
+  QueryClient,
+  QueryClientProvider,
+  useQuery,
+} from '@tanstack/react-query';
 
-import { useColorScheme } from '@/components/useColorScheme';
+const queryClient = new QueryClient();
 
-export {
-  // Catch any errors thrown by the Layout component.
-  ErrorBoundary,
-} from 'expo-router';
+// 1) Moved our "check user" logic into a separate function:
+async function checkUser() {
+  const userId = await AsyncStorage.getItem('userId');
+  if (!userId) return null;
 
-export const unstable_settings = {
-  // Ensure that reloading on `/modal` keeps a back button present.
-  initialRouteName: '(tabs)',
-};
+  // Optionally verify user on server:
+  // const res = await fetch(`YOUR_SERVER_URL/api/users/${userId}`);
+  // if (!res.ok) return null;
+  // return await res.json();
 
-// Prevent the splash screen from auto-hiding before asset loading is complete.
-SplashScreen.preventAutoHideAsync();
-
-export default function RootLayout() {
-  const [loaded, error] = useFonts({
-    SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
-    ...FontAwesome.font,
-  });
-
-  // Expo Router uses Error Boundaries to catch errors in the navigation tree.
-  useEffect(() => {
-    if (error) throw error;
-  }, [error]);
-
-  useEffect(() => {
-    if (loaded) {
-      SplashScreen.hideAsync();
-    }
-  }, [loaded]);
-
-  if (!loaded) {
-    return null;
-  }
-
-  return <RootLayoutNav />;
+  // If skipping server check, just return an object:
+  return {userId};
 }
 
-function RootLayoutNav() {
-  const colorScheme = useColorScheme();
-
+// 2) The top-level default export just sets up the provider
+export default function RootLayout() {
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
-      </Stack>
-    </ThemeProvider>
+    <QueryClientProvider client={queryClient}>
+      <InnerLayout />
+    </QueryClientProvider>
+  );
+}
+
+// 3) Put the actual logic (Splash + useQuery) in a child component
+function InnerLayout() {
+  const [appIsReady, setAppIsReady] = useState(false);
+
+  // Make sure splash doesn't auto-hide
+  useEffect(() => {
+    SplashScreen.preventAutoHideAsync().catch(() => {});
+  }, []);
+
+  // We can now safely call useQuery because the provider is above us
+  const {data: user, isLoading} = useQuery({
+    queryKey: ['currentUser'],
+    queryFn: checkUser,
+  });
+
+  // Once the query finishes, hide the splash
+  useEffect(() => {
+    if (!isLoading) {
+      setAppIsReady(true);
+      SplashScreen.hideAsync().catch(() => {});
+    }
+  }, [isLoading]);
+
+  // Show a loading screen if we haven’t finished
+  if (!appIsReady || isLoading) {
+    return (
+      <View style={{flex: 1, alignItems: 'center', justifyContent: 'center'}}>
+        <ActivityIndicator size='large' />
+      </View>
+    );
+  }
+
+  // If user is present, go to main tabs; else show auth flow
+  return (
+    <Stack>
+      {user ? (
+        <Stack.Screen name='(tabs)' options={{headerShown: false}} />
+      ) : (
+        <Stack.Screen name='(auth)' options={{headerShown: false}} />
+      )}
+    </Stack>
   );
 }

@@ -31,7 +31,7 @@ export async function POST(request: Request) {
       maxAge: 60 * 60 * 24 * 7, // 7 days
     });
 
-    return NextResponse.json({success: true});
+    return NextResponse.json({success: true, userId: String(user.id)});
   } catch (error) {
     console.error('Registration error:', error);
     return NextResponse.json({error: 'Something went wrong'}, {status: 500});

@@ -4,6 +4,7 @@ import {sign} from 'jsonwebtoken';
 import {cookies} from 'next/headers';
 
 export async function POST(request: Request) {
+  console.log('login request', request);
   try {
     const {email, password} = await request.json();
 
@@ -34,7 +35,7 @@ export async function POST(request: Request) {
       maxAge: 60 * 60 * 24 * 7, // 7 days
     });
 
-    return NextResponse.json({success: true});
+    return NextResponse.json({success: true, userId: String(user.id)});
   } catch (error) {
     console.error('Login error:', error);
     return NextResponse.json({error: 'Something went wrong'}, {status: 500});

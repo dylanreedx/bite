@@ -1,4 +1,4 @@
-import {eq, sql} from 'drizzle-orm';
+import {and, eq} from 'drizzle-orm';
 import {db} from '../db.js';
 import {foodLogsTable, foodTable, servingsTable} from '../schema.js';
 
@@ -33,7 +33,7 @@ export async function deleteFoodLog({
 }) {
   return db
     .delete(foodLogsTable)
-    .where(sql`id = ${logId} AND user_id = ${userId}`);
+    .where(and(eq(foodLogsTable.id, logId), eq(foodLogsTable.user_id, userId)));
 }
 
 export async function getTodaysFoodLogs(userId: number) {
@@ -57,7 +57,7 @@ export async function getTodaysFoodLogs(userId: number) {
       eq(foodLogsTable.serving_id, servingsTable.serving_id)
     )
     .where(
-      sql`${foodLogsTable.date} = ${today} AND ${foodLogsTable.user_id} = ${userId}`
+      and(eq(foodLogsTable.date, today), eq(foodLogsTable.user_id, userId))
     );
 }
 

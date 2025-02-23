@@ -51,13 +51,14 @@ export async function DELETE(request: Request) {
 export async function GET(request: Request) {
   const {searchParams} = new URL(request.url);
   const userId = searchParams.get('userId');
-  console.timeLog('userId', userId);
 
   if (!userId) {
     return NextResponse.json({error: 'User ID required'}, {status: 400});
   }
 
   const logs = await getTodaysFoodLogs(Number(userId));
+  console.log('userId', userId);
+  console.log('logs', logs);
 
   return NextResponse.json(logs);
 }
