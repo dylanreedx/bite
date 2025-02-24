@@ -1,8 +1,8 @@
 // app/(tabs)/_layout.tsx
-// Layout for main tabs
 import {Tabs} from 'expo-router';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import {Pressable} from 'react-native';
+import {useThemeColor} from '@/components/Themed';
 
 function TabBarIcon({name, color}: {name: string; color: string}) {
   return (
@@ -16,24 +16,83 @@ function TabBarIcon({name, color}: {name: string; color: string}) {
 }
 
 export default function TabsLayout() {
+  const backgroundColor = useThemeColor({}, 'surface');
+  const text = useThemeColor({}, 'text');
+  const primary = useThemeColor({}, 'primary');
+
   return (
     <Tabs
-      screenOptions={{
-        headerShown: false,
-      }}
+      tabBar={({state, navigation}) => (
+        <Pressable
+          style={{
+            flexDirection: 'row',
+            backgroundColor: backgroundColor,
+            paddingHorizontal: 10,
+            paddingTop: 10,
+            paddingBottom: 20,
+          }}
+        >
+          {state.routes.map((route, index) => {
+            const isFocused = state.index === index;
+            const onPress = () => {
+              const event = navigation.emit({
+                type: 'tabPress',
+                target: route.key,
+                canPreventDefault: true,
+              });
+              if (!isFocused && !event.defaultPrevented) {
+                navigation.navigate(route.name);
+              }
+            };
+
+            // Example icon logic
+            let iconName: string;
+            if (route.name === 'index') iconName = 'home';
+            else if (route.name === 'profile') iconName = 'user';
+            else if (route.name === 'log-food') iconName = 'search';
+            else iconName = 'list';
+
+            return (
+              <Pressable
+                key={route.key}
+                onPress={onPress}
+                style={{
+                  flex: 1,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  paddingVertical: 10,
+                }}
+              >
+                <TabBarIcon
+                  name={iconName}
+                  color={isFocused ? primary : text}
+                />
+              </Pressable>
+            );
+          })}
+        </Pressable>
+      )}
     >
       <Tabs.Screen
         name='index'
         options={{
+          headerShown: false,
           title: 'Home',
-          tabBarIcon: ({color}) => <TabBarIcon name='home' color={color} />,
         }}
       />
       <Tabs.Screen
-        name='two'
+        name='profile'
         options={{
-          title: 'Another',
-          tabBarIcon: ({color}) => <TabBarIcon name='list' color={color} />,
+          headerShown: false,
+          title: 'Profile',
+        }}
+      />
+      {/* NEW: Third tab for log-food */}
+      <Tabs.Screen
+        name='log-food'
+        options={{
+          headerShown: false,
+          tabBarButton: () => null,
         }}
       />
     </Tabs>

@@ -1,13 +1,13 @@
 // app/(tabs)/index.tsx
 // Simple home screen example
-import {View, Text, Button} from 'react-native';
+import {View, Text, Button, SafeAreaView} from '@/components/Themed';
 import {useFoodLogs, useLogFood} from '@/hooks/useFoodLogs';
-import {useAuth} from '@/hooks/useAuth';
+import {useRouter} from 'expo-router';
 
 export default function HomeScreen() {
-  const {data: logs = [], isLoading} = useFoodLogs();
+  const router = useRouter();
   const {mutate: logFood} = useLogFood();
-  const {logout} = useAuth();
+  const {data: logs = [], isLoading} = useFoodLogs();
 
   if (isLoading) {
     return (
@@ -18,19 +18,16 @@ export default function HomeScreen() {
   }
 
   return (
-    <View style={{padding: 20}}>
-      <Text>Today's Food Logs:</Text>
-      {logs.map((log: any) => (
-        <Text key={log.id}>
-          {log.food_name} - {log.quantity}
-        </Text>
-      ))}
-
-      <Button
-        title='Log Food'
-        onPress={() => logFood({foodId: 1, quantity: 2})}
-      />
-      <Button title='Logout' onPress={logout} color='red' />
-    </View>
+    <SafeAreaView style={{flex: 1}}>
+      <View style={{padding: 20}}>
+        <Text>Today's Food Logs:</Text>
+        <Button title='Log Food' onPress={() => router.push('/log-food')} />
+        {logs.map((log: any) => (
+          <Text key={log.id}>
+            {log.food_name} - {log.quantity}
+          </Text>
+        ))}
+      </View>
+    </SafeAreaView>
   );
 }

@@ -6,6 +6,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import {QueryClient, QueryClientProvider} from '@tanstack/react-query';
 import AuthProvider from '@/context/AuthContext';
 import {AuthGate} from '@/components/AuthGate';
+import {useThemeColor} from '@/components/Themed';
 
 const queryClient = new QueryClient();
 

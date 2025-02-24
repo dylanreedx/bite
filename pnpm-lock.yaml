@@ -225,6 +225,9 @@ importers:
       '@react-native-async-storage/async-storage':
         specifier: 1.23.1
         version: 1.23.1(react-native@0.76.7)
+      '@react-native-picker/picker':
+        specifier: 2.9.0
+        version: 2.9.0(react-native@0.76.7)(react@18.3.1)
       '@react-navigation/native':
         specifier: ^7.0.14
         version: 7.0.14(react-native@0.76.7)(react@18.3.1)
@@ -4686,6 +4689,16 @@ packages:
       react-native: ^0.0.0-0 || >=0.60 <1.0
     dependencies:
       merge-options: 3.0.4
+      react-native: 0.76.7(@babel/core@7.26.9)(@babel/preset-env@7.26.9)(@types/react@18.3.18)(react@18.3.1)
+    dev: false
+
+  /@react-native-picker/picker@2.9.0(react-native@0.76.7)(react@18.3.1):
+    resolution: {integrity: sha512-khEhIW/uhfMqq/+tvg4rEAiPGT8GX+Y6QydlP2TSMSmRHoSJK+ShXvXZXSr4Sii4imkj4BwvLunGywwtQDODqg==}
+    peerDependencies:
+      react: '*'
+      react-native: '*'
+    dependencies:
+      react: 18.3.1
       react-native: 0.76.7(@babel/core@7.26.9)(@babel/preset-env@7.26.9)(@types/react@18.3.18)(react@18.3.1)
     dev: false
 
