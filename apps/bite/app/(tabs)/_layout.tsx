@@ -17,7 +17,11 @@ function TabBarIcon({name, color}: {name: string; color: string}) {
 
 export default function TabsLayout() {
   return (
-    <Tabs>
+    <Tabs
+      screenOptions={{
+        headerShown: false,
+      }}
+    >
       <Tabs.Screen
         name='index'
         options={{

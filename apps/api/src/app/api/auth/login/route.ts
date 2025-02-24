@@ -24,6 +24,9 @@ export async function POST(request: Request) {
       );
     }
 
+    console.log('user', user);
+    console.log('validPassword', validPassword);
+
     const token = sign({userId: user.id}, process.env.JWT_SECRET || 'secret', {
       expiresIn: '7d',
     });

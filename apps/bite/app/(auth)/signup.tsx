@@ -1,5 +1,13 @@
+// app/(auth)/signup.tsx
 import {useState} from 'react';
-import {View, Text, TextInput, Button, Alert} from 'react-native';
+import {Alert} from 'react-native';
+import {
+  SafeAreaView,
+  View,
+  Text,
+  ThemedTextInput,
+  Button,
+} from '@/components/Themed';
 import {useAuth} from '@/hooks/useAuth';
 import {useRouter} from 'expo-router';
 
@@ -11,45 +19,55 @@ export default function SignupScreen() {
   const router = useRouter();
 
   const handleSignup = () => {
-    console.log('signup', {email, password, name});
     signup.mutate(
-      {email, password, name},
+      {name, email, password},
       {
-        onSuccess: () => {
-          router.replace('/');
-        },
-        onError: (err) => {
-          console.log('err', err);
-          Alert.alert('Error', 'Signup failed. Try again.');
-        },
+        onSuccess: () => router.replace('/'),
+        onError: () => Alert.alert('Error', 'Signup failed. Try again.'),
       }
     );
   };
 
   return (
-    <View style={{padding: 20}}>
-      <Text style={{fontSize: 18, marginBottom: 10}}>Sign Up</Text>
-      <TextInput
-        placeholder='Name'
-        value={name}
-        onChangeText={setName}
-        style={{borderBottomWidth: 1, marginBottom: 20}}
-      />
-      <TextInput
-        placeholder='Email'
-        value={email}
-        onChangeText={setEmail}
-        style={{borderBottomWidth: 1, marginBottom: 20}}
-      />
-      <TextInput
-        placeholder='Password'
-        value={password}
-        onChangeText={setPassword}
-        secureTextEntry
-        style={{borderBottomWidth: 1, marginBottom: 20}}
-      />
-      <Button title='Sign Up' onPress={handleSignup} />
-      <Button title='Go to Login' onPress={() => router.push('/login')} />
-    </View>
+    <SafeAreaView style={{flex: 1}}>
+      <View
+        style={{
+          padding: 20,
+          justifyContent: 'space-between',
+          flex: 1,
+        }}
+      >
+        <View>
+          <Text style={{fontSize: 18, marginBottom: 10}}>Sign Up</Text>
+          <View style={{gap: 10}}>
+            <ThemedTextInput
+              placeholder='Name'
+              value={name}
+              onChangeText={setName}
+            />
+            <ThemedTextInput
+              placeholder='Email'
+              value={email}
+              onChangeText={setEmail}
+            />
+            <ThemedTextInput
+              placeholder='Password'
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry
+            />
+          </View>
+        </View>
+
+        <View style={{gap: 10}}>
+          <Button title='Sign Up' onPress={handleSignup} />
+          <Button
+            variant='ghost'
+            title='Go to Login'
+            onPress={() => router.push('/login')}
+          />
+        </View>
+      </View>
+    </SafeAreaView>
   );
 }

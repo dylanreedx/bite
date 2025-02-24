@@ -1,6 +1,8 @@
-import {Stack} from 'expo-router';
+// app/_layout.tsx
+import {Stack, useSegments, useRouter} from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import {GestureHandlerRootView} from 'react-native-gesture-handler';
 import {useEffect, useState} from 'react';
 import {View, ActivityIndicator} from 'react-native';
 import {
@@ -9,47 +11,36 @@ import {
   useQuery,
 } from '@tanstack/react-query';
 
+// Prevent auto-hide of splash screen until ready.
+SplashScreen.preventAutoHideAsync().catch(() => {});
+
 const queryClient = new QueryClient();
 
-// 1) Moved our "check user" logic into a separate function:
 async function checkUser() {
   const userId = await AsyncStorage.getItem('userId');
-  if (!userId) return null;
-
-  // Optionally verify user on server:
-  // const res = await fetch(`YOUR_SERVER_URL/api/users/${userId}`);
-  // if (!res.ok) return null;
-  // return await res.json();
-
-  // If skipping server check, just return an object:
-  return {userId};
+  return userId ? {userId} : null;
 }
 
-// 2) The top-level default export just sets up the provider
 export default function RootLayout() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <InnerLayout />
-    </QueryClientProvider>
+    <GestureHandlerRootView style={{flex: 1}}>
+      <QueryClientProvider client={queryClient}>
+        <InnerLayout />
+      </QueryClientProvider>
+    </GestureHandlerRootView>
   );
 }
 
-// 3) Put the actual logic (Splash + useQuery) in a child component
 function InnerLayout() {
-  const [appIsReady, setAppIsReady] = useState(false);
-
-  // Make sure splash doesn't auto-hide
-  useEffect(() => {
-    SplashScreen.preventAutoHideAsync().catch(() => {});
-  }, []);
-
-  // We can now safely call useQuery because the provider is above us
+  const segments = useSegments();
+  const router = useRouter();
   const {data: user, isLoading} = useQuery({
     queryKey: ['currentUser'],
     queryFn: checkUser,
+    refetchOnMount: true,
   });
+  const [appIsReady, setAppIsReady] = useState(false);
 
-  // Once the query finishes, hide the splash
   useEffect(() => {
     if (!isLoading) {
       setAppIsReady(true);
@@ -57,7 +48,13 @@ function InnerLayout() {
     }
   }, [isLoading]);
 
-  // Show a loading screen if we haven’t finished
+  // Defer redirection until after mount.
+  useEffect(() => {
+    if (appIsReady && !isLoading && !user && segments[0] !== '(auth)') {
+      router.replace('/(auth)/login');
+    }
+  }, [appIsReady, isLoading, user, segments, router]);
+
   if (!appIsReady || isLoading) {
     return (
       <View style={{flex: 1, alignItems: 'center', justifyContent: 'center'}}>
@@ -66,7 +63,6 @@ function InnerLayout() {
     );
   }
 
-  // If user is present, go to main tabs; else show auth flow
   return (
     <Stack>
       {user ? (
