@@ -1,4 +1,4 @@
-import {eq, sql} from 'drizzle-orm';
+import {sql, eq} from 'drizzle-orm';
 import {db} from '../db.js';
 import {foodTable, servingsTable} from '../schema.js';
 
@@ -10,7 +10,7 @@ export async function searchFood(query: string) {
       brand_name: foodTable.brand_name,
       food_type: foodTable.food_type,
       food_url: foodTable.food_url,
-      // Get the default serving's calories
+      // Example: attach default serving's calories (where is_default = 1)
       calories: servingsTable.calories,
     })
     .from(foodTable)
@@ -38,6 +38,7 @@ export async function getFoodServings(foodId: number) {
     .where(eq(servingsTable.food_id, foodId));
 }
 
+// Helper types
 export type SearchFoodResult = Awaited<ReturnType<typeof searchFood>>[number];
 export type FoodServingResult = Awaited<
   ReturnType<typeof getFoodServings>
