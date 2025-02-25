@@ -9,6 +9,7 @@ import {
   useThemeColor,
 } from '@/components/Themed';
 import {useFoodLogs} from '@/hooks/useFoodLogs';
+import DailyMacros from '@/components/daily-macros';
 
 function parseNumberFromString(str: string) {
   const match = str.match(/[\d.]+/);
@@ -109,13 +110,12 @@ export default function HomeScreen() {
         </View>
 
         {/* Daily Totals Card */}
-        <View style={styles.totalsCard}>
-          <Text style={styles.totalsTitle}>Daily Totals</Text>
-          <Text>Calories: {totalCalories.toFixed(2)}</Text>
-          <Text>Carbs: {totalCarbs.toFixed(2)} g</Text>
-          <Text>Fat: {totalFat.toFixed(2)} g</Text>
-          <Text>Protein: {totalProtein.toFixed(2)} g</Text>
-        </View>
+        <DailyMacros
+          totalCalories={totalCalories}
+          totalCarbs={totalCarbs}
+          totalFat={totalFat}
+          totalProtein={totalProtein}
+        />
 
         {/* Logs List */}
         <FlatList
