@@ -21,6 +21,7 @@ export default function LoginScreen() {
     login.mutate(
       {email, password},
       {
+        onSuccess: () => router.replace('/'),
         onError: () =>
           Alert.alert('Error', 'Login failed. Check your credentials.'),
       }

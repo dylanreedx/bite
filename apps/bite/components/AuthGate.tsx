@@ -16,13 +16,12 @@ export function AuthGate({children}: {children: React.ReactNode}) {
       if (!user && segments[0] !== '(auth)') {
         router.replace('/(auth)/login');
       }
-      //   } else if (
-      //     user &&
-      //     !user.hasFinishedOnboarding &&
-      //     segments[0] !== '(onboarding)'
-      //   ) {
-      //     router.replace('/(onboarding)/step1');
-      //   }
+    } else if (
+      user &&
+      !user.hasFinishedOnboarding &&
+      segments[0] !== '(onboarding)'
+    ) {
+      router.replace('/(tabs)');
     }
   }, [loading, user, segments, router]);
 

@@ -81,18 +81,17 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
-        name='profile'
-        options={{
-          headerShown: false,
-          title: 'Profile',
-        }}
-      />
-      {/* NEW: Third tab for log-food */}
-      <Tabs.Screen
         name='log-food'
         options={{
           headerShown: false,
           tabBarButton: () => null,
+        }}
+      />
+      <Tabs.Screen
+        name='profile'
+        options={{
+          headerShown: false,
+          title: 'Profile',
         }}
       />
     </Tabs>

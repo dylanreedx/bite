@@ -1,6 +1,6 @@
 import {eq} from 'drizzle-orm';
-import {db} from '../db.js';
-import {usersTable, type User} from '../schema.js';
+import {db} from '../db.ts';
+import {usersTable, type User} from '../schema.ts';
 import {compare, hash} from 'bcrypt';
 
 export async function getUserByEmail(email: string) {
