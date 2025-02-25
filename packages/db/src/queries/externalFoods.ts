@@ -145,3 +145,51 @@ export async function fetchAndStoreServingsOnDemand(foodId: number) {
 
   return newServings;
 }
+
+/**
+ * Ensure a food row with the given foodId exists in local DB.
+ * If not, fetch from FatSecret and insert it.
+ * Returns the local DB row for that food.
+ */
+export async function fetchAndStoreFoodOnDemand(foodId: number) {
+  // Check if the food row already exists
+  const [existing] = await db
+    .select()
+    .from(foodTable)
+    .where(eq(foodTable.food_id, foodId))
+    .execute();
+
+  if (existing) {
+    return existing; // We already have this food in the DB
+  }
+
+  // If not, fetch from FatSecret
+  const fetchedFood = await getFoodWithRetry(foodId);
+  if (!fetchedFood) {
+    throw new Error(`Could not fetch foodId=${foodId} from FatSecret`);
+  }
+
+  // Insert minimal data for the new food row
+  // (Adjust these fields to match your real FatSecret response)
+  await db
+    .insert(foodTable)
+    .values({
+      food_id: foodId,
+      food_name: fetchedFood.name,
+      brand_name: fetchedFood.brandName || null,
+      food_type: fetchedFood.type || 'generic',
+      food_url: fetchedFood.url || '',
+      // for food_sub_categories, store something or just "[]"
+      food_sub_categories: '[]',
+    })
+    .execute();
+
+  // Return the newly inserted row
+  const [inserted] = await db
+    .select()
+    .from(foodTable)
+    .where(eq(foodTable.food_id, foodId))
+    .execute();
+
+  return inserted;
+}

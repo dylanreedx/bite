@@ -1,10 +1,11 @@
 import {NextResponse} from 'next/server';
+import {auth} from '~/lib/auth';
+// Instead of createFoodLog, import your new "on-demand" version
 import {
-  createFoodLog,
+  createFoodLogOnDemand,
   deleteFoodLog,
   getTodaysFoodLogs,
 } from '@suna/db/queries/food-log';
-import {auth} from '~/lib/auth';
 
 export async function POST(request: Request) {
   const user = await auth();
@@ -14,14 +15,19 @@ export async function POST(request: Request) {
 
   const {foodId, servingId, quantity} = await request.json();
 
-  await createFoodLog({
-    userId: user.id,
-    foodId,
-    servingId,
-    quantity,
-  });
-
-  return NextResponse.json({success: true});
+  try {
+    await createFoodLogOnDemand({
+      userId: user.id,
+      foodId,
+      servingId,
+      quantity,
+    });
+    return NextResponse.json({success: true});
+  } catch (err: unknown) {
+    console.error('Error creating food log:', err);
+    const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+    return NextResponse.json({error: errorMessage}, {status: 400});
+  }
 }
 
 export async function DELETE(request: Request) {
