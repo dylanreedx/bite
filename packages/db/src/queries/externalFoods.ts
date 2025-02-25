@@ -1,7 +1,7 @@
 import FatSecret from 'fatsecret.js';
-import {db} from '../db.js';
+import {db} from '../db.ts';
 import {eq} from 'drizzle-orm';
-import {foodTable, servingsTable} from '../schema.js';
+import {foodTable, servingsTable} from '../schema.ts';
 import {config} from 'dotenv';
 
 // Make sure your keys are set in your .env
@@ -154,6 +154,7 @@ export async function fetchAndStoreServingsOnDemand(foodId: number) {
 export async function fetchAndStoreFoodOnDemand(foodId: number) {
   // Check if the food row already exists
   const [existing] = await db
+
     .select()
     .from(foodTable)
     .where(eq(foodTable.food_id, foodId))
