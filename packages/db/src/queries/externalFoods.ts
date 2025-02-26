@@ -2,11 +2,11 @@ import FatSecret from 'fatsecret.js';
 import {db} from '../db.ts';
 import {eq} from 'drizzle-orm';
 import {foodTable, servingsTable} from '../schema.ts';
-import {config} from 'dotenv';
 
-// Make sure your keys are set in your .env
-config();
-const {FATSECRET_CONSUMER_KEY, FATSECRET_CONSUMER_SECRET} = process.env;
+// Load from `process.env` (works in Vercel API)
+const FATSECRET_CONSUMER_KEY = process.env.FATSECRET_CONSUMER_KEY!;
+const FATSECRET_CONSUMER_SECRET = process.env.FATSECRET_CONSUMER_SECRET!;
+
 if (!FATSECRET_CONSUMER_KEY || !FATSECRET_CONSUMER_SECRET) {
   throw new Error('FatSecret API keys are not defined.');
 }
