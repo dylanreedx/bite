@@ -1,25 +1,31 @@
-import {sql, eq} from 'drizzle-orm';
-import {db} from '../db.js';
-import {foodTable, servingsTable} from '../schema.js';
+import {eq, like, and} from 'drizzle-orm';
+import {db} from '../db.ts';
+import {foodTable, servingsTable} from '../schema.ts';
 
 export async function searchFood(query: string) {
-  return db
-    .select({
-      food_id: foodTable.food_id,
-      food_name: foodTable.food_name,
-      brand_name: foodTable.brand_name,
-      food_type: foodTable.food_type,
-      food_url: foodTable.food_url,
-      // Example: attach default serving's calories (where is_default = 1)
-      calories: servingsTable.calories,
-    })
-    .from(foodTable)
-    .leftJoin(
-      servingsTable,
-      sql`${foodTable.food_id} = ${servingsTable.food_id} AND ${servingsTable.is_default} = 1`
-    )
-    .where(sql`${foodTable.food_name} LIKE ${'%' + query + '%'}`)
-    .limit(20);
+  return (
+    db
+      .select({
+        food_id: foodTable.food_id,
+        food_name: foodTable.food_name,
+        brand_name: foodTable.brand_name,
+        food_type: foodTable.food_type,
+        food_url: foodTable.food_url,
+        calories: servingsTable.calories,
+      })
+      .from(foodTable)
+      // Join default serving (where is_default = 1)
+      .leftJoin(
+        servingsTable,
+        and(
+          eq(foodTable.food_id, servingsTable.food_id),
+          eq(servingsTable.is_default, 1)
+        )
+      )
+      // Use Drizzle's `like` helper
+      .where(like(foodTable.food_name, `%${query}%`))
+      .limit(20)
+  );
 }
 
 export async function getFoodServings(foodId: number) {
