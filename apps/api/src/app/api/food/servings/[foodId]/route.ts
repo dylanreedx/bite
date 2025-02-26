@@ -1,17 +1,21 @@
 import {fetchAndStoreServingsOnDemand} from '@suna/db/queries/externalFoods';
 import {NextResponse} from 'next/server';
+
 export async function GET(
   request: Request,
-  {params}: {params: {foodId: string}}
+  context: {params: Promise<{foodId: string}>}
 ) {
   try {
-    const foodId = Number.parseInt((await params).foodId);
-    if (isNaN(foodId)) {
+    // Await the params promise to get the actual params object
+    const {foodId} = await context.params;
+
+    const id = Number.parseInt(foodId);
+    if (isNaN(id)) {
       return NextResponse.json({error: 'Invalid food ID'}, {status: 400});
     }
 
-    // Call our fallback logic
-    const servings = await fetchAndStoreServingsOnDemand(foodId);
+    // Call your fallback logic
+    const servings = await fetchAndStoreServingsOnDemand(id);
 
     return NextResponse.json({servings});
   } catch (error) {
