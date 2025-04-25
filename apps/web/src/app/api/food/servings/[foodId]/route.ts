@@ -1,47 +1,28 @@
 import {fetchAndStoreServingsOnDemand} from '@suna/db/queries/externalFoods';
-
-// Assuming fetchAndStoreServingsOnDemand returns an array of serving objects
-// Define a type for clarity if you don't have one imported
-interface Serving {
-  serving_id: number;
-  serving_description: string;
-  // Add other serving properties (calories, protein, etc.)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  [key: string]: any; // Allow other properties
-}
+import {NextResponse} from 'next/server';
 
 export async function GET(
-  request: Request, // Standard Request object
-  context: {params: {foodId: string}} // Context contains route params
+  request: Request,
+  context: {params: Promise<{foodId: string}>}
 ) {
   try {
-    // No need to await context.params, it's directly available
-    const foodId = context.params.foodId;
-    const id = Number.parseInt(foodId);
+    // Await the params promise to get the actual params object
+    const {foodId} = await context.params;
 
+    const id = Number.parseInt(foodId);
     if (isNaN(id)) {
-      return new Response(JSON.stringify({error: 'Invalid food ID'}), {
-        status: 400,
-        headers: {'Content-Type': 'application/json'},
-      });
+      return NextResponse.json({error: 'Invalid food ID'}, {status: 400});
     }
 
-    // This function needs to handle DB lookup AND potentially calling
-    // the FatSecret proxy if servings aren't found locally.
-    const servings: Serving[] = await fetchAndStoreServingsOnDemand(id);
+    // Call your fallback logic
+    const servings = await fetchAndStoreServingsOnDemand(id);
 
-    return new Response(JSON.stringify({servings}), {
-      status: 200,
-      headers: {'Content-Type': 'application/json'},
-    });
+    return NextResponse.json({servings});
   } catch (error) {
-    console.error(
-      `Error fetching servings for foodId ${context.params.foodId}:`,
-      error
+    console.error('Error fetching servings with fallback:', error);
+    return NextResponse.json(
+      {error: 'Failed to fetch servings'},
+      {status: 500}
     );
-    return new Response(JSON.stringify({error: 'Failed to fetch servings'}), {
-      status: 500,
-      headers: {'Content-Type': 'application/json'},
-    });
   }
 }
