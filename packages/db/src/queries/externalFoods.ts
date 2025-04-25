@@ -1,196 +1,232 @@
-import FatSecret from 'fatsecret.js';
 import {db} from '../db.ts';
 import {eq} from 'drizzle-orm';
 import {foodTable, servingsTable} from '../schema.ts';
+// Remove direct FatSecret client import if no longer needed elsewhere here
+// import FatSecret from 'fatsecret.js';
 
-// Load from `process.env` (works in Vercel API)
-const FATSECRET_CONSUMER_KEY = process.env.FATSECRET_CONSUMER_KEY!;
-const FATSECRET_CONSUMER_SECRET = process.env.FATSECRET_CONSUMER_SECRET!;
+// Get Proxy URL from environment variables (MUST be set in Vercel)
+const PROXY_URL = process.env.FATSECRET_PROXY_URL;
 
-if (!FATSECRET_CONSUMER_KEY || !FATSECRET_CONSUMER_SECRET) {
-  throw new Error('FatSecret API keys are not defined.');
-}
+// Helper to call the proxy for food details with retry logic
+async function getFoodViaProxyWithRetry(
+  foodId: number,
+  retries = 3
+): Promise<any> {
+  if (!PROXY_URL) {
+    throw new Error(
+      'FATSECRET_PROXY_URL environment variable is not set. Cannot fetch external food data.'
+    );
+  }
 
-const client = new FatSecret.Client({
-  credentials: {
-    clientId: FATSECRET_CONSUMER_KEY,
-    clientSecret: FATSECRET_CONSUMER_SECRET,
-    scope: ['basic'],
-  },
-});
+  const url = `${PROXY_URL}/get-food?id=${foodId}`;
+  console.log(`Calling proxy to get food details: ${url}`);
 
-// Helper to gracefully handle rate-limit retries
-async function getFoodWithRetry(foodId: number, retries = 3): Promise<any> {
   try {
-    return await client.getFood({foodId: String(foodId)});
-  } catch (error: any) {
-    if (
-      retries > 0 &&
-      error.message &&
-      error.message.includes('too many actions')
-    ) {
-      console.warn(
-        `Rate limit hit for food_id=${foodId}. Waiting 60s, retries left: ${retries}`
+    const response = await fetch(url);
+
+    if (!response.ok) {
+      // Handle potential rate limiting from the proxy/FatSecret
+      if (retries > 0 && response.status === 429) {
+        // 429 Too Many Requests
+        console.warn(
+          `Rate limit hit via proxy for food_id=${foodId}. Waiting 60s, retries left: ${retries}`
+        );
+        await new Promise((resolve) => setTimeout(resolve, 60000));
+        return getFoodViaProxyWithRetry(foodId, retries - 1);
+      }
+      // Throw an error for other non-ok statuses
+      throw new Error(
+        `Proxy error fetching food ${foodId}: ${response.status} ${response.statusText}`
       );
-      await new Promise((resolve) => setTimeout(resolve, 60000));
-      return getFoodWithRetry(foodId, retries - 1);
     }
+
+    return await response.json(); // Parse the JSON response from the proxy
+  } catch (error: any) {
+    // Catch fetch errors or errors thrown above
+    console.error(`Error fetching food ${foodId} via proxy: ${error.message}`);
+    // If retries are exhausted or it's not a retryable error, re-throw
     throw error;
   }
 }
 
-/**
- * fetchAndStoreServingsOnDemand:
- * 1) Check if food exists in your DB (foodTable).
- * 2) If it exists but has no servings, call external API to fetch.
- * 3) Store new servings in DB.
- * 4) Return the (newly inserted or existing) servings.
- */
 export async function fetchAndStoreServingsOnDemand(foodId: number) {
-  // First, does this food exist locally at all?
+  // ... (keep the initial DB checks for food and existing servings) ...
   const [food] = await db
-    .select()
+    .select({food_id: foodTable.food_id}) // Select only needed field
     .from(foodTable)
     .where(eq(foodTable.food_id, foodId))
-    .execute();
+    .limit(1);
 
-  // If you ONLY want to handle the "food exists but is missing servings," you can check:
-  // if (!food) {
-  //   // optionally handle "food doesn't exist" flow here later
-  //   return [];
-  // }
-
-  // Now check if we already have servings for this food
-  const existingServings = await db
-    .select()
-    .from(servingsTable)
-    .where(eq(servingsTable.food_id, foodId))
-    .execute();
-
-  if (existingServings.length > 0) {
-    // Already have servings, just return them
-    return existingServings;
-  }
-
-  // If we reach here, the food is in the DB but has no servings.
-  // Let's fetch from FatSecret, then insert into our DB.
-  let fetchedFood;
-  try {
-    fetchedFood = await getFoodWithRetry(foodId);
-  } catch (err) {
-    console.error(`Failed to fetch or retry food_id=${foodId}`, err);
-    throw err;
-  }
-
-  if (!fetchedFood || !fetchedFood.servings) {
-    console.error(`No serving data from external API for food_id=${foodId}`);
+  if (!food) {
+    console.log(`Food ${foodId} not found locally. Cannot fetch servings.`);
+    // Or potentially call fetchAndStoreFoodOnDemand first? Depends on desired flow.
     return [];
   }
 
-  // Optionally update basic food info if needed:
-  await db
-    .update(foodTable)
-    .set({
-      food_name: fetchedFood.name,
-      brand_name: fetchedFood.brandName || null,
-      food_type: fetchedFood.type,
-      food_url: fetchedFood.url,
-      food_sub_categories: '[]', // or handle subcategories as needed
-    })
-    .where(eq(foodTable.food_id, foodId))
-    .execute();
+  const existingServings = await db
+    .select({serving_id: servingsTable.serving_id}) // Select only needed field
+    .from(servingsTable)
+    .where(eq(servingsTable.food_id, foodId))
+    .limit(1); // Just need to know if any exist
 
-  // Now insert the new servings
-  for (const s of fetchedFood.servings) {
+  if (existingServings.length > 0) {
+    console.log(`Servings for ${foodId} found locally.`);
+    // Retrieve and return all servings if needed
+    return db
+      .select()
+      .from(servingsTable)
+      .where(eq(servingsTable.food_id, foodId));
+  }
+
+  console.log(
+    `Servings for ${foodId} not found locally. Fetching via proxy...`
+  );
+  let fetchedFoodData;
+  try {
+    // *** Replace direct call with proxy call ***
+    fetchedFoodData = await getFoodViaProxyWithRetry(foodId);
+  } catch (err) {
+    console.error(
+      `Failed to fetch food_id=${foodId} via proxy after retries`,
+      err
+    );
+    // Decide how to handle failure: return empty, throw, etc.
+    return []; // Return empty array if fetch fails
+  }
+
+  // *** IMPORTANT: Adapt parsing based on proxy response structure ***
+  // Check the actual structure returned by fatSecretClient.getFood in your proxy
+  const servingsFromApi = fetchedFoodData?.servings?.serving; // Example structure, adjust!
+  const foodDetailsFromApi = fetchedFoodData?.food; // Example structure, adjust!
+
+  if (
+    !servingsFromApi ||
+    !Array.isArray(servingsFromApi) ||
+    servingsFromApi.length === 0
+  ) {
+    console.error(
+      `No valid serving data received from proxy for food_id=${foodId}`
+    );
+    return []; // Return empty if no servings found via proxy
+  }
+
+  // Optionally update basic food info if needed (use foodDetailsFromApi)
+  if (foodDetailsFromApi) {
+    await db
+      .update(foodTable)
+      .set({
+        food_name: foodDetailsFromApi.food_name, // Adjust field names
+        brand_name: foodDetailsFromApi.brand_name || null,
+        food_type: foodDetailsFromApi.food_type,
+        food_url: foodDetailsFromApi.food_url,
+        // food_sub_categories: '[]', // Handle as needed
+      })
+      .where(eq(foodTable.food_id, foodId));
+  }
+
+  // Now insert the new servings (use servingsFromApi)
+  // Adapt the mapping based on the actual structure of servingsFromApi
+  const servingsToInsert = servingsFromApi.map((s: any) => ({
+    serving_id: Number(s.serving_id), // Adjust field names as needed
+    serving_description: s.serving_description,
+    serving_url: s.serving_url,
+    food_id: foodId,
+    metric_serving_amount: s.metric_serving_amount
+      ? String(s.metric_serving_amount)
+      : null,
+    metric_serving_unit: s.metric_serving_unit,
+    number_of_units: s.number_of_units ? String(s.number_of_units) : null,
+    measurement_description: s.measurement_description,
+    calories: s.calories ? String(s.calories) : null,
+    carbohydrate: s.carbohydrate ? String(s.carbohydrate) : null,
+    protein: s.protein ? String(s.protein) : null,
+    fat: s.fat ? String(s.fat) : null,
+    saturated_fat: s.saturated_fat ? String(s.saturated_fat) : null,
+    polyunsaturated_fat: s.polyunsaturated_fat
+      ? String(s.polyunsaturated_fat)
+      : null,
+    monounsaturated_fat: s.monounsaturated_fat
+      ? String(s.monounsaturated_fat)
+      : null,
+    trans_fat: s.trans_fat ? String(s.trans_fat) : null,
+    cholesterol: s.cholesterol ? String(s.cholesterol) : null,
+    sodium: s.sodium ? String(s.sodium) : null,
+    potassium: s.potassium ? String(s.potassium) : null,
+    fiber: s.fiber ? String(s.fiber) : null,
+    sugar: s.sugar ? String(s.sugar) : null,
+    added_sugars: s.added_sugars ? String(s.added_sugars) : null, // Check if field exists
+    vitamin_d: s.vitamin_d ? String(s.vitamin_d) : null,
+    vitamin_a: s.vitamin_a ? String(s.vitamin_a) : null,
+    vitamin_c: s.vitamin_c ? String(s.vitamin_c) : null,
+    calcium: s.calcium ? String(s.calcium) : null,
+    iron: s.iron ? String(s.iron) : null,
+    is_default: s.is_default === '1' || s.is_default === true ? 1 : 0, // Handle default flag
+  }));
+
+  if (servingsToInsert.length > 0) {
+    console.log(
+      `Inserting ${servingsToInsert.length} new servings for food ${foodId}`
+    );
     await db
       .insert(servingsTable)
-      .values({
-        serving_id: Number(s.id),
-        serving_description: s.description,
-        serving_url: s.url,
-        food_id: foodId,
-        metric_serving_amount: s.metricServingAmount,
-        metric_serving_unit: s.metricServingUnit,
-        number_of_units: s.numberOfUnits,
-        measurement_description: s.measurementDescription,
-        calories: s.calories,
-        carbohydrate: s.carbohydrate,
-        protein: s.protein,
-        fat: s.fat,
-        saturated_fat: s.saturatedFat,
-        polyunsaturated_fat: s.polyunsaturatedFat,
-        monounsaturated_fat: s.monounsaturatedFat,
-        trans_fat: s.transFat,
-        cholesterol: s.cholesterol,
-        sodium: s.sodium,
-        potassium: s.potassium,
-        fiber: s.fiber,
-        sugar: s.sugar,
-        added_sugars: s.addedSugars,
-        vitamin_d: s.vitaminD,
-        vitamin_a: s.vitaminA,
-        vitamin_c: s.vitaminC,
-        calcium: s.calcium,
-        iron: s.iron,
-      })
-      .execute();
+      .values(servingsToInsert)
+      .onConflictDoNothing(); // Use onConflictDoNothing or update
   }
 
   // Finally, retrieve & return the newly inserted servings from DB
-  const newServings = await db
+  return db
     .select()
     .from(servingsTable)
-    .where(eq(servingsTable.food_id, foodId))
-    .execute();
-
-  return newServings;
+    .where(eq(servingsTable.food_id, foodId));
 }
 
-/**
- * Ensure a food row with the given foodId exists in local DB.
- * If not, fetch from FatSecret and insert it.
- * Returns the local DB row for that food.
- */
 export async function fetchAndStoreFoodOnDemand(foodId: number) {
-  // Check if the food row already exists
   const [existing] = await db
-
     .select()
     .from(foodTable)
     .where(eq(foodTable.food_id, foodId))
-    .execute();
+    .limit(1);
 
   if (existing) {
-    return existing; // We already have this food in the DB
+    return existing;
   }
 
-  // If not, fetch from FatSecret
-  const fetchedFood = await getFoodWithRetry(foodId);
-  if (!fetchedFood) {
-    throw new Error(`Could not fetch foodId=${foodId} from FatSecret`);
+  console.log(`Food ${foodId} not found locally. Fetching via proxy...`);
+  let fetchedFoodData;
+  try {
+    // *** Replace direct call with proxy call ***
+    fetchedFoodData = await getFoodViaProxyWithRetry(foodId);
+  } catch (err) {
+    console.error(
+      `Failed to fetch food_id=${foodId} via proxy after retries`,
+      err
+    );
+    throw new Error(`Could not fetch foodId=${foodId} via proxy`); // Re-throw or handle differently
+  }
+
+  // *** IMPORTANT: Adapt parsing based on proxy response structure ***
+  const foodDetailsFromApi = fetchedFoodData?.food; // Example structure, adjust!
+
+  if (!foodDetailsFromApi) {
+    throw new Error(
+      `Could not parse food details from proxy response for foodId=${foodId}`
+    );
   }
 
   // Insert minimal data for the new food row
-  // (Adjust these fields to match your real FatSecret response)
-  await db
-    .insert(foodTable)
-    .values({
-      food_id: foodId,
-      food_name: fetchedFood.name,
-      brand_name: fetchedFood.brandName || null,
-      food_type: fetchedFood.type || 'generic',
-      food_url: fetchedFood.url || '',
-      // for food_sub_categories, store something or just "[]"
-      food_sub_categories: '[]',
-    })
-    .execute();
+  // Adapt field names based on actual proxy response (foodDetailsFromApi)
+  const newFood = {
+    food_id: foodId,
+    food_name: foodDetailsFromApi.food_name, // Adjust field name
+    brand_name: foodDetailsFromApi.brand_name || null, // Adjust field name
+    food_type: foodDetailsFromApi.food_type || 'generic', // Adjust field name
+    food_url: foodDetailsFromApi.food_url || '', // Adjust field name
+    food_sub_categories: '[]', // Handle as needed
+  };
 
-  // Return the newly inserted row
-  const [inserted] = await db
-    .select()
-    .from(foodTable)
-    .where(eq(foodTable.food_id, foodId))
-    .execute();
+  console.log(`Inserting new food ${foodId} fetched via proxy.`);
+  await db.insert(foodTable).values(newFood).onConflictDoNothing();
 
-  return inserted;
+  // Return the newly inserted row (or query again to be certain)
+  return newFood; // Return the object we just inserted
 }
