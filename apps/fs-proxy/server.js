@@ -1,4 +1,3 @@
-// apps/fatsecret-proxy/server.js
 const express = require('express');
 const axios = require('axios');
 const FatSecret = require('fatsecret.js');
@@ -16,23 +15,29 @@ if (!FATSECRET_CONSUMER_KEY || !FATSECRET_CONSUMER_SECRET) {
 }
 
 // --- Initialize FatSecret Client ---
-// Using the same setup as your db package
 const fatSecretClient = new FatSecret.Client({
   credentials: {
     clientId: FATSECRET_CONSUMER_KEY,
     clientSecret: FATSECRET_CONSUMER_SECRET,
-    // Scope might be needed depending on the operations, 'basic' is often default
     scope: ['basic'],
   },
 });
 
 // --- Initialize Express App ---
 const app = express();
-const port = PORT || 3001; // Use PORT from environment or default to 3001
+const port = PORT || 3001;
+
+// Add CORS middleware for your SvelteKit app
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
+  next();
+});
 
 // --- Proxy Search Endpoint ---
 app.get('/search', async (req, res) => {
-  const query = req.query.q; // Get search term from ?q=...
+  const query = req.query.q;
+  const maxResults = req.query.max_results || 20;
 
   if (!query || typeof query !== 'string' || query.trim() === '') {
     return res
@@ -43,31 +48,17 @@ app.get('/search', async (req, res) => {
   console.log(`[Proxy] Received search request for: "${query}"`);
 
   try {
-    // --- Call FatSecret using the library ---
-    // The library handles authentication and request formatting
     const searchResults = await fatSecretClient.foods.search({
       search_expression: query,
-      // Add any other parameters the library or FatSecret API supports/requires
-      // e.g., max_results: 20, page_number: 0
+      max_results: maxResults,
+      format: 'json'
     });
 
-    console.log(`[Proxy] Successfully fetched data for: "${query}"`);
-
-    // --- Return FatSecret's response ---
-    // The structure of searchResults depends on the fatsecret.js library.
-    // Assuming it returns the data directly:
+    console.log(`[Proxy] Successfully fetched search data for: "${query}"`);
     res.status(200).json(searchResults);
   } catch (error) {
-    console.error(
-      `[Proxy] Error searching FatSecret for "${query}":`,
-      error.message
-    );
-    // Log the full error for debugging if needed
-    // console.error(error);
-
-    // Try to return a meaningful error status code if possible
-    // (The library might throw errors with status codes, or it might be generic)
-    const statusCode = error.statusCode || 500; // Default to 500 Internal Server Error
+    console.error(`[Proxy] Error searching FatSecret for "${query}":`, error.message);
+    const statusCode = error.statusCode || 500;
     res.status(statusCode).json({
       error: 'Failed to fetch data from FatSecret',
       details: error.message || 'Unknown error',
@@ -75,13 +66,23 @@ app.get('/search', async (req, res) => {
   }
 });
 
-app.get('/get-food', async (req, res) => {
-  const foodIdQuery = req.query.id; // Get food ID from ?id=...
+// --- Food Details Endpoint (multiple aliases for compatibility) ---
+app.get('/food', async (req, res) => {
+  const foodIdQuery = req.query.food_id;
+  return getFoodDetails(req, res, foodIdQuery);
+});
 
+app.get('/get-food', async (req, res) => {
+  const foodIdQuery = req.query.id;
+  return getFoodDetails(req, res, foodIdQuery);
+});
+
+// Shared function for getting food details
+async function getFoodDetails(req, res, foodIdQuery) {
   if (!foodIdQuery || typeof foodIdQuery !== 'string') {
     return res
       .status(400)
-      .json({error: "Missing or invalid food ID parameter 'id'"});
+      .json({error: "Missing or invalid food ID parameter"});
   }
 
   const foodId = Number.parseInt(foodIdQuery);
@@ -89,19 +90,16 @@ app.get('/get-food', async (req, res) => {
     return res.status(400).json({error: 'Invalid food ID format'});
   }
 
-  console.log(`[Proxy] Received get-food request for ID: ${foodId}`);
+  console.log(`[Proxy] Received food details request for ID: ${foodId}`);
 
   try {
-    // --- Call FatSecret using the library's getFood method ---
-    // The library handles auth. This runs on the proxy server with the whitelisted IP.
-    // NOTE: The fatsecret.js library might expect the ID as a string.
-    const foodDetails = await fatSecretClient.getFood({
-      foodId: String(foodId),
+    // Use the correct method name for getting food details
+    const foodDetails = await fatSecretClient.foods.get({
+      food_id: String(foodId),
+      format: 'json'
     });
 
     console.log(`[Proxy] Successfully fetched details for ID: ${foodId}`);
-
-    // --- Return FatSecret's response ---
     res.status(200).json(foodDetails);
   } catch (error) {
     console.error(
@@ -114,6 +112,50 @@ app.get('/get-food', async (req, res) => {
       details: error.message || 'Unknown error',
     });
   }
+}
+
+// --- Autocomplete Endpoint (useful for future enhancements) ---
+app.get('/autocomplete', async (req, res) => {
+  const query = req.query.q;
+  const maxResults = req.query.max_results || 8;
+
+  if (!query || typeof query !== 'string' || query.trim() === '') {
+    return res
+      .status(400)
+      .json({error: "Missing or invalid search query parameter 'q'"});
+  }
+
+  console.log(`[Proxy] Received autocomplete request for: "${query}"`);
+
+  try {
+    // Note: Check if fatsecret.js supports autocomplete, otherwise fall back to search
+    const autocompleteResults = await fatSecretClient.foods.autocomplete({
+      expression: query,
+      max_results: maxResults,
+      format: 'json'
+    });
+
+    console.log(`[Proxy] Successfully fetched autocomplete data for: "${query}"`);
+    res.status(200).json(autocompleteResults);
+  } catch (error) {
+    console.error(`[Proxy] Autocomplete not supported, falling back to search`);
+    // Fallback to regular search if autocomplete isn't supported
+    try {
+      const searchResults = await fatSecretClient.foods.search({
+        search_expression: query,
+        max_results: maxResults,
+        format: 'json'
+      });
+      res.status(200).json(searchResults);
+    } catch (fallbackError) {
+      console.error(`[Proxy] Error in autocomplete fallback:`, fallbackError.message);
+      const statusCode = fallbackError.statusCode || 500;
+      res.status(statusCode).json({
+        error: 'Failed to fetch autocomplete data from FatSecret',
+        details: fallbackError.message || 'Unknown error',
+      });
+    }
+  }
 });
 
 // --- Basic Root Route ---
@@ -121,7 +163,27 @@ app.get('/', (req, res) => {
   res.status(200).send('FatSecret Proxy is running!');
 });
 
+// --- Health Check ---
+app.get('/health', (req, res) => {
+  res.status(200).json({
+    status: 'healthy',
+    timestamp: new Date().toISOString(),
+    endpoints: [
+      'GET /search?q={query}&max_results={limit}',
+      'GET /food?food_id={id}',
+      'GET /get-food?id={id}',
+      'GET /autocomplete?q={query}&max_results={limit}'
+    ]
+  });
+});
+
 // --- Start Server ---
 app.listen(port, () => {
   console.log(`FatSecret Proxy server listening on port ${port}`);
+  console.log(`Available endpoints:`);
+  console.log(`  GET /search?q={query}`);
+  console.log(`  GET /food?food_id={id}`);
+  console.log(`  GET /get-food?id={id}`);
+  console.log(`  GET /autocomplete?q={query}`);
+  console.log(`  GET /health`);
 });
