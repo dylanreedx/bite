@@ -106,10 +106,12 @@
 			return;
 		}
 
-		// Debounce search
+		// Shorter debounce for better responsiveness, but still avoid too many requests
+		const debounceTime = query.length >= 4 ? 200 : 400; // Faster search for longer queries
+
 		searchTimeout = setTimeout(() => {
 			foodStore.searchFoods(query, maxResults);
-		}, 300);
+		}, debounceTime);
 	}
 
 	function handleFoodSelect(food: FoodSearchResult) {
@@ -175,6 +177,26 @@
 			return 'Recently';
 		}
 	}
+
+	function highlightMatch(text: string, query: string): string {
+		if (!query || !text) return text;
+
+		const tokens = query
+			.toLowerCase()
+			.split(/[\s,&\-\+]+/)
+			.filter((t) => t.length > 1);
+		let highlightedText = text;
+
+		tokens.forEach((token) => {
+			const regex = new RegExp(`(${token})`, 'gi');
+			highlightedText = highlightedText.replace(
+				regex,
+				'<mark class="bg-yellow-400/30 text-yellow-200">$1</mark>'
+			);
+		});
+
+		return highlightedText;
+	}
 </script>
 
 <div class="flex h-full min-h-0 flex-col">
@@ -227,13 +249,17 @@
 							</div>
 							<div class="min-w-0 flex-grow">
 								<div class="flex items-center gap-2">
-									<h3 class="truncate font-medium text-neutral-100">{food.foodName}</h3>
+									<h3 class="truncate font-medium text-neutral-100">
+										{@html highlightMatch(food.foodName, searchQuery)}
+									</h3>
 									{#if food.source === 'fatsecret'}
 										<span class="rounded-full bg-blue-600 px-2 py-0.5 text-xs text-white">New</span>
 									{/if}
 								</div>
 								{#if food.brandName}
-									<p class="truncate text-sm text-neutral-400">{food.brandName}</p>
+									<p class="truncate text-sm text-neutral-400">
+										{@html highlightMatch(food.brandName, searchQuery)}
+									</p>
 								{/if}
 								{#if food.servingDescription}
 									<p class="text-xs text-neutral-500">{food.servingDescription}</p>

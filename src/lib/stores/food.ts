@@ -53,43 +53,90 @@ function createFoodStore() {
 	const isLoggingFood: Writable<boolean> = writable(false);
 	const isDeletingLog: Writable<boolean> = writable(false);
 
-	// Search functionality
+	// Search functionality with improved relevance and caching
+	let searchCache = new Map<string, FoodSearchResult[]>();
+	let lastSearchTime = 0;
+
 	async function searchFoods(query: string, limit: number = 20): Promise<void> {
-		if (!query.trim()) {
+		const trimmedQuery = query.trim();
+		if (!trimmedQuery) {
 			searchResults.set([]);
+			searchQuery.set('');
+			return;
+		}
+
+		// Check cache first
+		const cacheKey = `${trimmedQuery.toLowerCase()}_${limit}`;
+		if (searchCache.has(cacheKey)) {
+			const cachedResults = searchCache.get(cacheKey)!;
+			searchResults.set(cachedResults);
+			searchQuery.set(trimmedQuery);
 			return;
 		}
 
 		isSearching.set(true);
 		searchError.set(null);
-		searchQuery.set(query);
+		searchQuery.set(trimmedQuery);
+
+		const searchStartTime = Date.now();
+		lastSearchTime = searchStartTime;
 
 		try {
 			const response = await fetch(
-				`/api/foods/search?q=${encodeURIComponent(query)}&limit=${limit}`
+				`/api/foods/search?q=${encodeURIComponent(trimmedQuery)}&limit=${limit}`
 			);
+
+			// Check if this search is still relevant (user might have typed more)
+			if (searchStartTime < lastSearchTime) {
+				return; // Newer search has started, ignore this result
+			}
+
 			const data: SearchFoodsResponse = await response.json();
 
 			if (data.success) {
-				searchResults.set(data.foods || []);
+				const results = data.foods || [];
+
+				// Cache successful results
+				searchCache.set(cacheKey, results);
+
+				// Limit cache size to prevent memory issues
+				if (searchCache.size > 50) {
+					const firstKey = searchCache.keys().next().value;
+					searchCache.delete(firstKey);
+				}
+
+				searchResults.set(results);
 			} else {
 				searchError.set(data.error || 'Search failed');
 				searchResults.set([]);
 			}
 		} catch (error) {
 			console.error('Search error:', error);
-			searchError.set('Network error occurred');
-			searchResults.set([]);
+
+			// Only set error if this is still the current search
+			if (searchStartTime >= lastSearchTime) {
+				searchError.set('Network error occurred');
+				searchResults.set([]);
+			}
 		} finally {
-			isSearching.set(false);
+			// Only clear loading if this is still the current search
+			if (searchStartTime >= lastSearchTime) {
+				isSearching.set(false);
+			}
 		}
 	}
 
-	// Clear search results
+	// Clear search results and cache
 	function clearSearch(): void {
 		searchResults.set([]);
 		searchQuery.set('');
 		searchError.set(null);
+		isSearching.set(false);
+	}
+
+	// Clear search cache (useful for refreshing data)
+	function clearSearchCache(): void {
+		searchCache.clear();
 	}
 
 	// Get food details with caching
@@ -410,6 +457,7 @@ function createFoodStore() {
 		});
 		foodDetailsCache.set(new Map());
 		logError.set(null);
+		searchCache.clear();
 	}
 
 	// Derived stores
@@ -446,6 +494,7 @@ function createFoodStore() {
 		// Actions
 		searchFoods,
 		clearSearch,
+		clearSearchCache,
 		getFoodDetails,
 		loadRecentFoods,
 		loadTodayLog,

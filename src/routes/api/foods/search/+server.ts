@@ -44,8 +44,91 @@ interface FoodSearchResult {
 	source: 'local' | 'fatsecret';
 }
 
+function tokenizeQuery(query: string): string[] {
+	// Split on spaces, commas, and other separators, filter out empty strings
+	return query
+		.toLowerCase()
+		.split(/[\s,&\-\+]+/)
+		.filter((token) => token.length > 0);
+}
+
+function calculateRelevanceScore(
+	foodName: string,
+	brandName: string | null,
+	queryTokens: string[]
+): number {
+	const foodNameLower = foodName.toLowerCase();
+	const brandNameLower = (brandName || '').toLowerCase();
+	const combinedText = `${foodNameLower} ${brandNameLower}`.trim();
+
+	let score = 0;
+
+	// Exact phrase match gets highest score
+	const originalQuery = queryTokens.join(' ');
+	if (combinedText.includes(originalQuery)) {
+		score += 100;
+	}
+
+	// Check each token
+	for (const token of queryTokens) {
+		if (token.length < 2) continue; // Skip very short tokens
+
+		// Exact word match in food name
+		if (foodNameLower.split(/\s+/).includes(token)) {
+			score += 50;
+		}
+		// Exact word match in brand name
+		else if (brandNameLower.split(/\s+/).includes(token)) {
+			score += 40;
+		}
+		// Starts with token in food name
+		else if (foodNameLower.includes(token)) {
+			if (foodNameLower.startsWith(token)) {
+				score += 30;
+			} else {
+				score += 20;
+			}
+		}
+		// Starts with token in brand name
+		else if (brandNameLower.includes(token)) {
+			if (brandNameLower.startsWith(token)) {
+				score += 25;
+			} else {
+				score += 15;
+			}
+		}
+	}
+
+	// Bonus for matching multiple tokens
+	const matchedTokens = queryTokens.filter((token) =>
+		combinedText.includes(token.toLowerCase())
+	).length;
+
+	if (matchedTokens === queryTokens.length) {
+		score += 20; // All tokens matched
+	} else if (matchedTokens > 1) {
+		score += 10; // Multiple tokens matched
+	}
+
+	return score;
+}
+
 async function searchLocalFoods(query: string, limit: number = 10): Promise<FoodSearchResult[]> {
 	try {
+		const queryTokens = tokenizeQuery(query);
+
+		// Build a more sophisticated search query
+		const searchConditions = queryTokens.map(
+			(token) =>
+				sql`(${food.foodName} LIKE ${'%' + token + '%'} OR ${food.brandName} LIKE ${'%' + token + '%'})`
+		);
+
+		// Also search for the full query as a phrase
+		const fullQueryCondition = sql`(${food.foodName} LIKE ${'%' + query + '%'} OR ${food.brandName} LIKE ${'%' + query + '%'})`;
+
+		// Combine conditions with OR for individual tokens and include full phrase
+		const whereCondition = sql`(${fullQueryCondition} OR ${sql.join(searchConditions, sql` OR `)})`;
+
 		const results = await db
 			.select({
 				foodId: food.foodId,
@@ -61,38 +144,46 @@ async function searchLocalFoods(query: string, limit: number = 10): Promise<Food
 				servingDescription: serving.servingDescription
 			})
 			.from(food)
-			.leftJoin(serving, and(
-				eq(serving.foodId, food.foodId),
-				eq(serving.isDefault, 1)
-			))
-			.where(
-				sql`(${food.foodName} LIKE ${'%' + query + '%'} OR ${food.brandName} LIKE ${'%' + query + '%'})`
-			)
-			.limit(limit);
+			.leftJoin(serving, and(eq(serving.foodId, food.foodId), eq(serving.isDefault, 1)))
+			.where(whereCondition)
+			.limit(limit * 3); // Get more results for ranking
 
-		return results.map(item => ({
+		// Calculate relevance scores and sort
+		const scoredResults = results.map((item) => ({
 			...item,
 			calories: item.calories ?? 0,
 			protein: item.protein ?? 0,
 			carbohydrate: item.carbohydrate ?? 0,
 			fat: item.fat ?? 0,
-			source: 'local' as const
+			source: 'local' as const,
+			_score: calculateRelevanceScore(item.foodName, item.brandName, queryTokens)
 		}));
+
+		// Sort by relevance score (descending) and take the top results
+		scoredResults.sort((a, b) => b._score - a._score);
+
+		// Remove the _score property before returning
+		return scoredResults.slice(0, limit).map(({ _score, ...item }) => item);
 	} catch (error) {
 		console.error('Error searching local foods:', error);
 		return [];
 	}
 }
 
-async function searchFatSecretFoods(query: string, limit: number = 10): Promise<FoodSearchResult[]> {
+async function searchFatSecretFoods(
+	query: string,
+	limit: number = 10
+): Promise<FoodSearchResult[]> {
 	if (!PROXY_URL) {
 		console.warn('FATSECRET_PROXY_URL not configured');
 		return [];
 	}
 
 	try {
-		const response = await fetch(`${PROXY_URL}/search?q=${encodeURIComponent(query)}&max_results=${limit}`);
-		
+		const response = await fetch(
+			`${PROXY_URL}/search?q=${encodeURIComponent(query)}&max_results=${limit}`
+		);
+
 		if (!response.ok) {
 			console.error(`FatSecret proxy error: ${response.status} ${response.statusText}`);
 			return [];
@@ -100,20 +191,18 @@ async function searchFatSecretFoods(query: string, limit: number = 10): Promise<
 
 		const data = await response.json();
 		console.log(`[FatSecret] Raw response:`, JSON.stringify(data, null, 2));
-		
+
 		// Handle different response formats
 		let foods = [];
-		
+
 		if (data.foods_search?.results?.food) {
 			// Old FatSecret API format
-			foods = Array.isArray(data.foods_search.results.food) 
-				? data.foods_search.results.food 
+			foods = Array.isArray(data.foods_search.results.food)
+				? data.foods_search.results.food
 				: [data.foods_search.results.food];
 		} else if (data.foods?.food) {
 			// Alternative format
-			foods = Array.isArray(data.foods.food) 
-				? data.foods.food 
-				: [data.foods.food];
+			foods = Array.isArray(data.foods.food) ? data.foods.food : [data.foods.food];
 		} else if (data.foods && Array.isArray(data.foods)) {
 			// Direct foods array format from proxy
 			foods = data.foods;
@@ -129,9 +218,10 @@ async function searchFatSecretFoods(query: string, limit: number = 10): Promise<
 		}
 
 		return foods.map((item: any) => ({
-			foodId: typeof (item.food_id || item.id) === 'string' 
-				? parseInt(item.food_id || item.id) 
-				: (item.food_id || item.id),
+			foodId:
+				typeof (item.food_id || item.id) === 'string'
+					? parseInt(item.food_id || item.id)
+					: item.food_id || item.id,
 			foodName: item.food_name || item.name || 'Unknown Food',
 			brandName: item.brand_name || item.brandName || null,
 			foodType: item.food_type || item.type || 'Generic',
@@ -159,23 +249,26 @@ async function saveFoodToDatabase(foodData: FoodSearchResult): Promise<void> {
 		}
 
 		// Use upsert (insert or update on conflict) to handle duplicates gracefully
-		await db.insert(food).values({
-			foodId: foodData.foodId,
-			foodName: foodData.foodName,
-			brandName: foodData.brandName,
-			foodType: foodData.foodType || 'Generic',
-			foodUrl: foodData.foodUrl || '',
-			foodSubCategories: foodData.foodSubCategories
-		}).onConflictDoUpdate({
-			target: food.foodId,
-			set: {
+		await db
+			.insert(food)
+			.values({
+				foodId: foodData.foodId,
 				foodName: foodData.foodName,
 				brandName: foodData.brandName,
 				foodType: foodData.foodType || 'Generic',
 				foodUrl: foodData.foodUrl || '',
 				foodSubCategories: foodData.foodSubCategories
-			}
-		});
+			})
+			.onConflictDoUpdate({
+				target: food.foodId,
+				set: {
+					foodName: foodData.foodName,
+					brandName: foodData.brandName,
+					foodType: foodData.foodType || 'Generic',
+					foodUrl: foodData.foodUrl || '',
+					foodSubCategories: foodData.foodSubCategories
+				}
+			});
 
 		console.log(`[Database] Saved/updated food: ${foodData.foodName} (ID: ${foodData.foodId})`);
 	} catch (error) {
@@ -198,11 +291,11 @@ export const GET: RequestHandler = async ({ url }) => {
 
 	try {
 		console.log(`[Food Search] Searching for: "${searchQuery}"`);
-		
+
 		// Step 1: Search local database first
 		const localResults = await searchLocalFoods(searchQuery, limit);
 		console.log(`[Food Search] Found ${localResults.length} local results`);
-		
+
 		// Step 2: If we have sufficient local results, return them
 		if (localResults.length >= 5) {
 			return json({
@@ -215,31 +308,29 @@ export const GET: RequestHandler = async ({ url }) => {
 				}
 			});
 		}
-		
+
 		// Step 3: Search FatSecret proxy for more results
 		console.log(`[Food Search] Searching FatSecret proxy for additional results...`);
 		const externalResults = await searchFatSecretFoods(searchQuery, limit);
 		console.log(`[Food Search] Found ${externalResults.length} external results`);
-		
+
 		// Step 4: Save ALL external results to database immediately
 		if (externalResults.length > 0) {
 			console.log(`[Food Search] Saving ${externalResults.length} external foods to database...`);
 			try {
-				await Promise.all(
-					externalResults.map(foodData => saveFoodToDatabase(foodData))
-				);
+				await Promise.all(externalResults.map((foodData) => saveFoodToDatabase(foodData)));
 				console.log(`[Food Search] Successfully saved external foods to database`);
 			} catch (error) {
 				console.error('[Food Search] Error saving external foods:', error);
 			}
 		}
-		
+
 		// Step 5: Combine results, prioritizing local first
 		const allResults = [...localResults, ...externalResults];
-		
+
 		// Step 6: Remove duplicates (favor local results)
-		const uniqueResults = allResults.filter((item, index, self) =>
-			index === self.findIndex(t => t.foodId === item.foodId)
+		const uniqueResults = allResults.filter(
+			(item, index, self) => index === self.findIndex((t) => t.foodId === item.foodId)
 		);
 
 		// Step 7: Sort by source (local first) then alphabetically
@@ -249,7 +340,9 @@ export const GET: RequestHandler = async ({ url }) => {
 			return a.foodName.localeCompare(b.foodName);
 		});
 
-		console.log(`[Food Search] Returning ${uniqueResults.length} total results (${localResults.length} local, ${externalResults.length} external)`);
+		console.log(
+			`[Food Search] Returning ${uniqueResults.length} total results (${localResults.length} local, ${externalResults.length} external)`
+		);
 
 		return json({
 			success: true,
@@ -260,13 +353,15 @@ export const GET: RequestHandler = async ({ url }) => {
 				external: externalResults.length
 			}
 		});
-
 	} catch (error) {
 		console.error('Food search error:', error);
-		return json({
-			success: false,
-			error: 'Failed to search foods',
-			foods: []
-		}, { status: 500 });
+		return json(
+			{
+				success: false,
+				error: 'Failed to search foods',
+				foods: []
+			},
+			{ status: 500 }
+		);
 	}
 };
