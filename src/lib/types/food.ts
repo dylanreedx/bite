@@ -227,6 +227,10 @@ export interface DeleteLogEntryResponse extends ApiResponse {
 	message: string;
 }
 
+export interface UpdateLogEntryResponse extends ApiResponse {
+	logEntry: FoodLogEntry;
+}
+
 // Nutrition goals and progress types
 export interface NutritionGoals {
 	calories: number;

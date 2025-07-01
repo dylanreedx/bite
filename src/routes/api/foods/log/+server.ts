@@ -339,7 +339,7 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 			sugar: 0,
 			sodium: 0,
 			saturatedFat: 0,
-			cholesterol: 0
+									cholesterol: 0
 		});
 
 		return json({
@@ -356,6 +356,91 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 			success: false,
 			error: 'Failed to fetch food log'
 		}, { status: 500 });
+	}
+};
+
+export const PUT: RequestHandler = async ({ request, locals }) => {
+	if (!locals.user) {
+		return json({ success: false, error: 'Authentication required' }, { status: 401 });
+	}
+
+	const userId = locals.user.id;
+
+	try {
+		const { id, servingId, quantity, meal } = await request.json();
+
+		if (!id || !servingId || !quantity) {
+			return json({ success: false, error: 'Missing required fields' }, { status: 400 });
+		}
+
+		const updatedLog = await db
+			.update(foodLog)
+			.set({
+				servingId,
+				quantity,
+				meal
+			})
+			.where(and(eq(foodLog.id, id), eq(foodLog.userId, userId)))
+			.returning();
+
+		if (updatedLog.length === 0) {
+			return json({ success: false, error: 'Log entry not found or unauthorized' }, { status: 404 });
+		}
+
+		const logEntryInfo = await db
+			.select({
+				id: foodLog.id,
+				userId: foodLog.userId,
+				foodId: foodLog.foodId,
+				servingId: foodLog.servingId,
+				quantity: foodLog.quantity,
+				loggedAt: foodLog.loggedAt,
+				date: foodLog.date,
+				meal: foodLog.meal,
+				foodName: food.foodName,
+				brandName: food.brandName,
+				foodType: food.foodType,
+				servingDescription: serving.servingDescription,
+				calories: serving.calories,
+				protein: serving.protein,
+				carbohydrate: serving.carbohydrate,
+				fat: serving.fat,
+				fiber: serving.fiber,
+				sugar: serving.sugar,
+				sodium: serving.sodium,
+				saturatedFat: serving.saturatedFat,
+				cholesterol: serving.cholesterol
+			})
+			.from(foodLog)
+			.innerJoin(food, eq(foodLog.foodId, food.foodId))
+			.innerJoin(serving, eq(foodLog.servingId, serving.servingId))
+			.where(eq(foodLog.id, id))
+			.limit(1);
+
+		const logEntry = logEntryInfo[0];
+
+		const nutritionData = {
+			calories: (logEntry.calories ?? 0) * logEntry.quantity,
+			protein: (logEntry.protein ?? 0) * logEntry.quantity,
+			carbohydrate: (logEntry.carbohydrate ?? 0) * logEntry.quantity,
+			fat: (logEntry.fat ?? 0) * logEntry.quantity,
+			fiber: (logEntry.fiber ?? 0) * logEntry.quantity,
+			sugar: (logEntry.sugar ?? 0) * logEntry.quantity,
+			sodium: (logEntry.sodium ?? 0) * logEntry.quantity,
+			saturatedFat: (logEntry.saturatedFat ?? 0) * logEntry.quantity,
+			cholesterol: (logEntry.cholesterol ?? 0) * logEntry.quantity
+		};
+
+		return json({
+			success: true,
+			logEntry: {
+				...logEntry,
+				nutrition: nutritionData
+			}
+		});
+	} catch (error) {
+		console.error('Error updating food log:', error);
+		return json({ success: false, error: 'Failed to update food log entry' }, { status: 500 });
 	}
 };
 

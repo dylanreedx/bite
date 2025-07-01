@@ -13,7 +13,8 @@ import type {
 	GetRecentFoodsResponse,
 	LogFoodResponse,
 	GetFoodLogResponse,
-	DeleteLogEntryResponse
+	DeleteLogEntryResponse,
+	UpdateLogEntryResponse
 } from '$lib/types/food.ts';
 
 // Food search and management store
@@ -52,6 +53,7 @@ function createFoodStore() {
 	// Loading states
 	const isLoggingFood: Writable<boolean> = writable(false);
 	const isDeletingLog: Writable<boolean> = writable(false);
+	const isUpdatingLog: Writable<boolean> = writable(false);
 
 	// Search functionality
 	async function searchFoods(query: string, limit: number = 20): Promise<void> {
@@ -289,6 +291,56 @@ function createFoodStore() {
 		}
 	}
 
+	// Update a food log entry
+	async function updateLogEntry(entry: FoodLogEntry): Promise<boolean> {
+		isUpdatingLog.set(true);
+
+		try {
+			const response = await fetch(`/api/foods/log`, {
+				method: 'PUT',
+				headers: {
+					'Content-Type': 'application/json'
+				},
+				body: JSON.stringify(entry)
+			});
+
+			const data: UpdateLogEntryResponse = await response.json();
+
+			if (data.success && data.logEntry) {
+				const updatedEntry = data.logEntry;
+				const currentLog = get(todayLog);
+				const index = currentLog.findIndex(item => item.id === updatedEntry.id);
+
+				if (index !== -1) {
+					currentLog[index] = updatedEntry;
+					todayLog.set([...currentLog]);
+				}
+
+				// Recalculate totals
+				const newTotals = get(todayLog).reduce((acc, item) => {
+					acc.calories += item.nutrition.calories || 0;
+					acc.protein += item.nutrition.protein || 0;
+					acc.carbohydrate += item.nutrition.carbohydrate || 0;
+					acc.fat += item.nutrition.fat || 0;
+					acc.fiber += item.nutrition.fiber || 0;
+					acc.sugar += item.nutrition.sugar || 0;
+					acc.sodium += item.nutrition.sodium || 0;
+					return acc;
+				}, { calories: 0, protein: 0, carbohydrate: 0, fat: 0, fiber: 0, sugar: 0, sodium: 0 });
+				todayTotals.set(newTotals);
+
+				return true;
+			} else {
+				throw new Error(data.error || 'Failed to update log entry');
+			}
+		} catch (error) {
+			console.error('Error updating log entry:', error);
+			throw error;
+		} finally {
+			isUpdatingLog.set(false);
+		}
+	}
+
 	// Quick add functionality for frequent foods
 	async function quickAddFood(food: RecentFood, quantity: number = 1): Promise<FoodLogEntry> {
 		try {
@@ -384,6 +436,7 @@ function createFoodStore() {
 		loadTodayLog,
 		logFood,
 		deleteLogEntry,
+		updateLogEntry,
 		quickAddFood,
 		setSelectedDate,
 		initialize,
