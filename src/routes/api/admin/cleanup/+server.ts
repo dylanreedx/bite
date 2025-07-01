@@ -45,11 +45,11 @@ export const POST: RequestHandler = async ({ request }) => {
 			try {
 				await db
 					.update(serving)
-					.set({ [field]: null })
-					.where(sql`${serving[field]} != ${serving[field]}`); // This checks for NaN
+					.set({ [field as keyof typeof serving]: null })
+					.where(sql`${serving[field as keyof typeof serving]} != ${serving[field as keyof typeof serving]}`); // This checks for NaN
 				
 				cleanupResults.push(`${field}: cleaned NaN values`);
-			} catch (error) {
+			} catch (error: any) {
 				cleanupResults.push(`${field}: error - ${error.message}`);
 			}
 		}
@@ -101,7 +101,7 @@ export const POST: RequestHandler = async ({ request }) => {
 		return json({
 			success: false,
 			error: 'Cleanup failed',
-			details: error.message
+			details: (error as any).message
 		}, { status: 500 });
 	}
 };

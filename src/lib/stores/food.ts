@@ -1,5 +1,5 @@
 import { writable, derived, type Writable, type Readable } from 'svelte/store';
-import { authStore } from './auth.ts';
+import { authStore } from './auth';
 import { get } from 'svelte/store';
 import type {
 	FoodSearchResult,
@@ -65,7 +65,9 @@ function createFoodStore() {
 		searchQuery.set(query);
 
 		try {
-			const response = await fetch(`/api/foods/search?q=${encodeURIComponent(query)}&limit=${limit}`);
+			const response = await fetch(
+				`/api/foods/search?q=${encodeURIComponent(query)}&limit=${limit}`
+			);
 			const data: SearchFoodsResponse = await response.json();
 
 			if (data.success) {
@@ -93,7 +95,7 @@ function createFoodStore() {
 	// Get food details with caching
 	async function getFoodDetails(foodId: number): Promise<FoodDetails> {
 		const cache = get(foodDetailsCache);
-		
+
 		// Return cached result if available
 		if (cache.has(foodId)) {
 			return cache.get(foodId)!;
@@ -118,7 +120,10 @@ function createFoodStore() {
 	}
 
 	// Load recent foods
-	async function loadRecentFoods(type: 'recent' | 'frequent' = 'recent', limit: number = 10): Promise<void> {
+	async function loadRecentFoods(
+		type: 'recent' | 'frequent' = 'recent',
+		limit: number = 10
+	): Promise<void> {
 		isLoadingRecent.set(true);
 
 		try {
@@ -148,20 +153,22 @@ function createFoodStore() {
 		logError.set(null);
 
 		try {
-			const response = await fetch(`/api/foods/log?date=${targetDate}`);
+			const response = await fetch(`/api/foods/entries?date=${targetDate}`);
 			const data: GetFoodLogResponse = await response.json();
 
 			if (data.success) {
 				todayLog.set(data.logs || []);
-				todayTotals.set(data.dailyTotals || {
-					calories: 0,
-					protein: 0,
-					carbohydrate: 0,
-					fat: 0,
-					fiber: 0,
-					sugar: 0,
-					sodium: 0
-				});
+				todayTotals.set(
+					data.dailyTotals || {
+						calories: 0,
+						protein: 0,
+						carbohydrate: 0,
+						fat: 0,
+						fiber: 0,
+						sugar: 0,
+						sodium: 0
+					}
+				);
 			} else {
 				logError.set(data.error || 'Failed to load food log');
 			}
@@ -173,12 +180,68 @@ function createFoodStore() {
 		}
 	}
 
+	// Update a food log entry
+	async function updateLogEntry(
+		entryId: number,
+		servingId?: number,
+		quantity?: number,
+		meal?: string | null,
+		date?: string
+	): Promise<FoodLogEntry> {
+		isLoggingFood.set(true);
+
+		try {
+			const requestBody: any = {
+				id: entryId
+			};
+
+			if (servingId !== undefined) requestBody.servingId = servingId;
+			if (quantity !== undefined) requestBody.quantity = quantity;
+			if (meal !== undefined) requestBody.meal = meal || null;
+			if (date !== undefined) requestBody.date = date;
+
+			console.log('Updating food entry with request body:', JSON.stringify(requestBody, null, 2));
+
+			const response = await fetch('/api/foods/entries', {
+				method: 'PUT',
+				headers: {
+					'Content-Type': 'application/json'
+				},
+				body: JSON.stringify(requestBody)
+			});
+
+			const data: LogFoodResponse = await response.json();
+			console.log('Food update response:', JSON.stringify(data, null, 2));
+
+			if (data.success && data.logEntry) {
+				// Update the entry in today's log
+				const currentLog = get(todayLog);
+				const updatedLog = currentLog.map((entry) =>
+					entry.id === entryId ? data.logEntry : entry
+				);
+				todayLog.set(updatedLog);
+
+				// Refresh totals by reloading the log
+				loadTodayLog();
+
+				return data.logEntry;
+			} else {
+				throw new Error(data.error || 'Failed to update food entry');
+			}
+		} catch (error) {
+			console.error('Error updating food entry:', error);
+			throw error;
+		} finally {
+			isLoggingFood.set(false);
+		}
+	}
+
 	// Log a food entry
 	async function logFood(
-		foodId: number, 
-		servingId: number, 
-		quantity: number, 
-		meal?: string | null, 
+		foodId: number,
+		servingId: number,
+		quantity: number,
+		meal?: string | null,
 		date?: string
 	): Promise<FoodLogEntry> {
 		isLoggingFood.set(true);
@@ -194,7 +257,7 @@ function createFoodStore() {
 
 			console.log('Logging food with request body:', JSON.stringify(requestBody, null, 2));
 
-			const response = await fetch('/api/foods/log', {
+			const response = await fetch('/api/foods/entries', {
 				method: 'POST',
 				headers: {
 					'Content-Type': 'application/json'
@@ -209,17 +272,18 @@ function createFoodStore() {
 				// Add to today's log if logging for today
 				const logDate = date || get(selectedDate);
 				const today = new Date().toISOString().split('T')[0];
-				
+
 				if (logDate === today) {
 					const currentLog = get(todayLog);
 					todayLog.set([data.logEntry, ...currentLog]);
-					
+
 					// Update totals
 					const currentTotals = get(todayTotals);
 					const newTotals: DailyTotals = {
 						calories: (currentTotals.calories || 0) + (data.logEntry.nutrition.calories || 0),
 						protein: (currentTotals.protein || 0) + (data.logEntry.nutrition.protein || 0),
-						carbohydrate: (currentTotals.carbohydrate || 0) + (data.logEntry.nutrition.carbohydrate || 0),
+						carbohydrate:
+							(currentTotals.carbohydrate || 0) + (data.logEntry.nutrition.carbohydrate || 0),
 						fat: (currentTotals.fat || 0) + (data.logEntry.nutrition.fat || 0),
 						fiber: (currentTotals.fiber || 0) + (data.logEntry.nutrition.fiber || 0),
 						sugar: (currentTotals.sugar || 0) + (data.logEntry.nutrition.sugar || 0),
@@ -228,8 +292,9 @@ function createFoodStore() {
 					todayTotals.set(newTotals);
 				}
 
-				// Refresh recent foods to include this new entry
+				// Refresh recent foods and today's log to include this new entry
 				loadRecentFoods('recent');
+				loadTodayLog();
 
 				return data.logEntry;
 			} else {
@@ -248,27 +313,48 @@ function createFoodStore() {
 		isDeletingLog.set(true);
 
 		try {
-			const response = await fetch(`/api/foods/log?id=${logId}`, {
+			console.log(`Attempting to delete log entry with ID: ${logId}`);
+			const response = await fetch(`/api/foods/entries?id=${logId}`, {
 				method: 'DELETE'
 			});
+
+			console.log(`Delete response status: ${response.status} ${response.statusText}`);
+
+			if (!response.ok) {
+				const errorText = await response.text();
+				console.error(
+					`Delete request failed: ${response.status} ${response.statusText}`,
+					errorText
+				);
+				return false;
+			}
 
 			const data: DeleteLogEntryResponse = await response.json();
 
 			if (data.success) {
 				// Remove from today's log
 				const currentLog = get(todayLog);
-				const entryToRemove = currentLog.find(entry => entry.id === logId);
-				
+				const entryToRemove = currentLog.find((entry) => entry.id === logId);
+
 				if (entryToRemove) {
-					const updatedLog = currentLog.filter(entry => entry.id !== logId);
+					const updatedLog = currentLog.filter((entry) => entry.id !== logId);
 					todayLog.set(updatedLog);
 
 					// Update totals
 					const currentTotals = get(todayTotals);
 					const newTotals: DailyTotals = {
-						calories: Math.max(0, (currentTotals.calories || 0) - (entryToRemove.nutrition.calories || 0)),
-						protein: Math.max(0, (currentTotals.protein || 0) - (entryToRemove.nutrition.protein || 0)),
-						carbohydrate: Math.max(0, (currentTotals.carbohydrate || 0) - (entryToRemove.nutrition.carbohydrate || 0)),
+						calories: Math.max(
+							0,
+							(currentTotals.calories || 0) - (entryToRemove.nutrition.calories || 0)
+						),
+						protein: Math.max(
+							0,
+							(currentTotals.protein || 0) - (entryToRemove.nutrition.protein || 0)
+						),
+						carbohydrate: Math.max(
+							0,
+							(currentTotals.carbohydrate || 0) - (entryToRemove.nutrition.carbohydrate || 0)
+						),
 						fat: Math.max(0, (currentTotals.fat || 0) - (entryToRemove.nutrition.fat || 0)),
 						fiber: Math.max(0, (currentTotals.fiber || 0) - (entryToRemove.nutrition.fiber || 0)),
 						sugar: Math.max(0, (currentTotals.sugar || 0) - (entryToRemove.nutrition.sugar || 0)),
@@ -283,32 +369,10 @@ function createFoodStore() {
 			}
 		} catch (error) {
 			console.error('Error deleting log entry:', error);
-			throw error;
+			// Don't re-throw the error - return false instead
+			return false;
 		} finally {
 			isDeletingLog.set(false);
-		}
-	}
-
-	// Quick add functionality for frequent foods
-	async function quickAddFood(food: RecentFood, quantity: number = 1): Promise<FoodLogEntry> {
-		try {
-			// If we have serving info, log directly
-			if (food.servingId) {
-				return await logFood(food.foodId, food.servingId, quantity, null);
-			} else {
-				// Get food details to find default serving
-				const foodDetails = await getFoodDetails(food.foodId);
-				const defaultServing = foodDetails.servings.find(s => s.isDefault === 1) || foodDetails.servings[0];
-				
-				if (defaultServing) {
-					return await logFood(food.foodId, defaultServing.servingId, quantity, null);
-				} else {
-					throw new Error('No serving information available');
-				}
-			}
-		} catch (error) {
-			console.error('Error quick adding food:', error);
-			throw error;
 		}
 	}
 
@@ -349,8 +413,11 @@ function createFoodStore() {
 	}
 
 	// Derived stores
-	const hasSearchResults: Readable<boolean> = derived(searchResults, $results => $results.length > 0);
-	const hasTodayLog: Readable<boolean> = derived(todayLog, $log => $log.length > 0);
+	const hasSearchResults: Readable<boolean> = derived(
+		searchResults,
+		($results) => $results.length > 0
+	);
+	const hasTodayLog: Readable<boolean> = derived(todayLog, ($log) => $log.length > 0);
 
 	return {
 		// Readable stores
@@ -358,16 +425,16 @@ function createFoodStore() {
 		searchQuery: { subscribe: searchQuery.subscribe },
 		isSearching: { subscribe: isSearching.subscribe },
 		searchError: { subscribe: searchError.subscribe },
-		
+
 		recentFoods: { subscribe: recentFoods.subscribe },
 		frequentFoods: { subscribe: frequentFoods.subscribe },
 		isLoadingRecent: { subscribe: isLoadingRecent.subscribe },
-		
+
 		todayLog: { subscribe: todayLog.subscribe },
 		todayTotals: { subscribe: todayTotals.subscribe },
 		isLoadingLog: { subscribe: isLoadingLog.subscribe },
 		logError: { subscribe: logError.subscribe },
-		
+
 		selectedDate: { subscribe: selectedDate.subscribe },
 		isLoggingFood: { subscribe: isLoggingFood.subscribe },
 		isDeletingLog: { subscribe: isDeletingLog.subscribe },
@@ -375,7 +442,7 @@ function createFoodStore() {
 		// Derived stores
 		hasSearchResults,
 		hasTodayLog,
-		
+
 		// Actions
 		searchFoods,
 		clearSearch,
@@ -383,8 +450,8 @@ function createFoodStore() {
 		loadRecentFoods,
 		loadTodayLog,
 		logFood,
+		updateLogEntry,
 		deleteLogEntry,
-		quickAddFood,
 		setSelectedDate,
 		initialize,
 		clear
@@ -394,7 +461,7 @@ function createFoodStore() {
 export const foodStore = createFoodStore();
 
 // Auto-initialize when auth state changes
-authStore.subscribe(authState => {
+authStore.subscribe((authState) => {
 	if (authState.user) {
 		foodStore.initialize();
 	} else {

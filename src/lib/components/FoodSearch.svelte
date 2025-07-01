@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { createEventDispatcher, onMount } from 'svelte';
 	import { Search, Loader2, AlertCircle, Plus, Clock } from 'lucide-svelte';
-	import { foodStore } from '$lib/stores/food.ts';
-	import type { FoodSearchResult } from '$lib/types/food.ts';
+	import { foodStore } from '$lib/stores/food';
+	import type { FoodSearchResult, RecentFood } from '$lib/types/food';
 
 	// Props
 	interface Props {
@@ -31,35 +31,36 @@
 	}>();
 
 	// Store state
-	let searchResults = $state([]);
+	let searchResults: FoodSearchResult[] = $state([]);
 	let searchQuery = $state('');
 	let isSearching = $state(false);
-	let searchError = $state(null);
-	let recentFoods = $state([]);
+	let searchError: string | null = $state(null);
+
+	let recentFoods: RecentFood[] = $state([]);
 	let isLoadingRecent = $state(false);
 	let hasSearchResults = $state(false);
 
 	// Subscribe to stores
 	$effect(() => {
-		const unsubscribeSearchResults = foodStore.searchResults.subscribe(results => {
+		const unsubscribeSearchResults = foodStore.searchResults.subscribe((results) => {
 			searchResults = results;
 		});
-		const unsubscribeSearchQuery = foodStore.searchQuery.subscribe(query => {
+		const unsubscribeSearchQuery = foodStore.searchQuery.subscribe((query) => {
 			searchQuery = query;
 		});
-		const unsubscribeIsSearching = foodStore.isSearching.subscribe(searching => {
+		const unsubscribeIsSearching = foodStore.isSearching.subscribe((searching) => {
 			isSearching = searching;
 		});
-		const unsubscribeSearchError = foodStore.searchError.subscribe(error => {
+		const unsubscribeSearchError = foodStore.searchError.subscribe((error) => {
 			searchError = error;
 		});
-		const unsubscribeRecentFoods = foodStore.recentFoods.subscribe(foods => {
+		const unsubscribeRecentFoods = foodStore.recentFoods.subscribe((foods) => {
 			recentFoods = foods;
 		});
-		const unsubscribeLoadingRecent = foodStore.isLoadingRecent.subscribe(loading => {
+		const unsubscribeLoadingRecent = foodStore.isLoadingRecent.subscribe((loading) => {
 			isLoadingRecent = loading;
 		});
-		const unsubscribeHasResults = foodStore.hasSearchResults.subscribe(hasResults => {
+		const unsubscribeHasResults = foodStore.hasSearchResults.subscribe((hasResults) => {
 			hasSearchResults = hasResults;
 		});
 
@@ -76,9 +77,12 @@
 
 	onMount(() => {
 		if (autoFocus && searchInput) {
-			searchInput.focus();
+			// Delay focus slightly to ensure proper keyboard handling
+			setTimeout(() => {
+				searchInput.focus();
+			}, 100);
 		}
-		
+
 		// Load recent foods on mount
 		if (showRecentFoods) {
 			foodStore.loadRecentFoods('recent', 10);
@@ -117,7 +121,7 @@
 		foodStore.clearSearch();
 	}
 
-	function handleRecentFoodSelect(food: typeof recentFoods[0]) {
+	function handleRecentFoodSelect(food: (typeof recentFoods)[0]) {
 		// Convert recent food to search result format
 		const searchResult: FoodSearchResult = {
 			foodId: food.foodId,
@@ -173,15 +177,15 @@
 	}
 </script>
 
-<div class="relative w-full">
+<div class="flex h-full min-h-0 flex-col">
 	<!-- Search Input -->
-	<div class="relative">
-		<Search class="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-neutral-400" />
+	<div class="relative flex-shrink-0">
+		<Search class="absolute top-1/2 left-3 h-5 w-5 -translate-y-1/2 text-neutral-400" />
 		<input
 			bind:this={searchInput}
 			type="text"
 			{placeholder}
-			class="w-full rounded-lg border border-neutral-600 bg-neutral-700 py-3 pl-10 pr-4 text-neutral-100 placeholder-neutral-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-colors"
+			class="w-full rounded-lg border border-neutral-600 bg-neutral-700 py-3 pr-4 pl-10 text-neutral-100 placeholder-neutral-400 transition-colors focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none"
 			oninput={handleInput}
 			onfocus={handleFocus}
 			onblur={handleBlur}
@@ -189,73 +193,72 @@
 		/>
 	</div>
 
-	<!-- Search Dropdown -->
+	<!-- Search Results Container -->
 	{#if showDropdown}
-		<div class="absolute top-full left-0 right-0 z-50 mt-2 max-h-96 overflow-y-auto rounded-lg border border-neutral-600 bg-neutral-800 shadow-2xl scrollbar-thin scrollbar-track-neutral-800 scrollbar-thumb-neutral-600 hover:scrollbar-thumb-neutral-500">
+		<div
+			class="scrollbar-thin scrollbar-track-neutral-800 scrollbar-thumb-neutral-600 hover:scrollbar-thumb-neutral-500 mt-2 flex-1 overflow-y-auto rounded-lg border border-neutral-600 bg-neutral-800 shadow-2xl"
+			style="min-height: 200px; max-height: 400px;"
+		>
 			<!-- Loading State -->
 			{#if isSearching}
 				<div class="flex items-center justify-center p-4">
 					<Loader2 class="h-5 w-5 animate-spin text-blue-400" />
 					<span class="ml-2 text-sm text-neutral-300">Searching...</span>
 				</div>
-			<!-- Search Error -->
+				<!-- Search Error -->
 			{:else if searchError}
 				<div class="flex items-center p-4 text-red-400">
 					<AlertCircle class="h-5 w-5" />
 					<span class="ml-2 text-sm">{searchError}</span>
 				</div>
-			<!-- Search Results -->
+				<!-- Search Results -->
 			{:else if hasSearchResults}
 				<div class="py-2">
-					<div class="px-3 py-2 text-xs font-medium text-neutral-400 uppercase tracking-wide">
+					<div class="px-3 py-2 text-xs font-medium tracking-wide text-neutral-400 uppercase">
 						Search Results
 					</div>
-					{#each searchResults as food (food.foodId)}
+					{#each searchResults as food: FoodSearchResult (`search-${food.foodId}`)}
 						<button
-							class="w-full px-3 py-3 text-left transition-colors hover:bg-neutral-700 focus:bg-neutral-700 focus:outline-none"
 							onclick={() => handleFoodSelect(food)}
+							class="flex w-full items-center gap-3 p-3 text-left transition-colors hover:bg-neutral-700 focus:bg-neutral-700 focus:outline-none"
 						>
-							<div class="flex items-start justify-between">
-								<div class="flex-grow min-w-0">
-									<div class="flex items-center gap-2">
-										<h3 class="font-medium text-neutral-100 truncate">{food.foodName}</h3>
-										{#if food.source === 'fatsecret'}
-											<span class="px-2 py-0.5 text-xs bg-blue-600 text-white rounded-full">New</span>
-										{/if}
-									</div>
-									{#if food.brandName}
-										<p class="text-sm text-neutral-400 truncate">{food.brandName}</p>
-									{/if}
-									{#if food.servingDescription}
-										<p class="text-xs text-neutral-500">{food.servingDescription}</p>
-									{/if}
-									{#if food.calories || food.protein || food.carbohydrate || food.fat}
-										<div class="mt-1 flex items-center gap-3 text-xs text-neutral-400">
-											{#if food.calories}
-												<span class="text-orange-400">{formatNutrition(food.calories)} cal</span>
-											{/if}
-											{#if food.protein}
-												<span class="text-sky-400">{formatNutrition(food.protein)}g P</span>
-											{/if}
-											{#if food.carbohydrate}
-												<span class="text-purple-400">{formatNutrition(food.carbohydrate)}g C</span>
-											{/if}
-											{#if food.fat}
-												<span class="text-green-400">{formatNutrition(food.fat)}g F</span>
-											{/if}
-										</div>
-									{:else}
-										<div class="mt-1 text-xs text-neutral-500 italic">
-											Nutrition info will be loaded when logged
-										</div>
+							<div class="flex-shrink-0 rounded-md bg-neutral-600 p-2">
+								<Search class="h-5 w-5 text-blue-400" />
+							</div>
+							<div class="min-w-0 flex-grow">
+								<div class="flex items-center gap-2">
+									<h3 class="truncate font-medium text-neutral-100">{food.foodName}</h3>
+									{#if food.source === 'fatsecret'}
+										<span class="rounded-full bg-blue-600 px-2 py-0.5 text-xs text-white">New</span>
 									{/if}
 								</div>
-								<Plus class="ml-2 h-5 w-5 flex-shrink-0 text-neutral-400" />
+								{#if food.brandName}
+									<p class="truncate text-sm text-neutral-400">{food.brandName}</p>
+								{/if}
+								{#if food.servingDescription}
+									<p class="text-xs text-neutral-500">{food.servingDescription}</p>
+								{/if}
+								{#if food.calories || food.protein || food.carbohydrate || food.fat}
+									<div class="mt-1 flex items-center gap-3 text-xs text-neutral-400">
+										{#if food.calories}
+											<span class="text-orange-400">{Math.round(food.calories)} cal</span>
+										{/if}
+										{#if food.protein}
+											<span class="text-sky-400">{Math.round(food.protein)}g P</span>
+										{/if}
+										{#if food.carbohydrate}
+											<span class="text-purple-400">{Math.round(food.carbohydrate)}g C</span>
+										{/if}
+										{#if food.fat}
+											<span class="text-green-400">{Math.round(food.fat)}g F</span>
+										{/if}
+									</div>
+								{/if}
 							</div>
 						</button>
 					{/each}
 				</div>
-			<!-- Recent Foods (when no search query) -->
+				<!-- Recent Foods (when no search query) -->
 			{:else if showRecentFoods && !searchQuery}
 				{#if isLoadingRecent}
 					<div class="flex items-center justify-center p-4">
@@ -264,22 +267,24 @@
 					</div>
 				{:else if recentFoods.length > 0}
 					<div class="py-2">
-						<div class="px-3 py-2 text-xs font-medium text-neutral-400 uppercase tracking-wide flex items-center gap-2">
+						<div
+							class="flex items-center gap-2 px-3 py-2 text-xs font-medium tracking-wide text-neutral-400 uppercase"
+						>
 							<Clock class="h-3 w-3" />
 							Recent Foods
 						</div>
-						{#each recentFoods as food (food.foodId)}
+						{#each recentFoods as food (`recent-${food.foodId}`)}
 							<button
-								class="w-full px-3 py-3 text-left transition-colors hover:bg-neutral-700 focus:bg-neutral-700 focus:outline-none"
+								class="w-full px-3 py-3 text-left transition-colors hover:bg-neutral-700 focus:bg-neutral-700 focus:outline-none active:bg-neutral-600"
 								onclick={() => handleRecentFoodSelect(food)}
 							>
 								<div class="flex items-start justify-between">
-									<div class="flex-grow min-w-0">
-										<h3 class="font-medium text-neutral-100 truncate">{food.foodName}</h3>
+									<div class="min-w-0 flex-grow">
+										<h3 class="truncate font-medium text-neutral-100">{food.foodName}</h3>
 										{#if food.brandName}
-											<p class="text-sm text-neutral-400 truncate">{food.brandName}</p>
+											<p class="truncate text-sm text-neutral-400">{food.brandName}</p>
 										{/if}
-										<div class="flex items-center justify-between mt-1">
+										<div class="mt-1 flex items-center justify-between">
 											{#if food.servingDescription}
 												<p class="text-xs text-neutral-500">{food.servingDescription}</p>
 											{/if}
@@ -294,7 +299,9 @@
 													<span class="text-sky-400">{formatNutrition(food.protein)}g P</span>
 												{/if}
 												{#if food.carbohydrate}
-													<span class="text-purple-400">{formatNutrition(food.carbohydrate)}g C</span>
+													<span class="text-purple-400"
+														>{formatNutrition(food.carbohydrate)}g C</span
+													>
 												{/if}
 												{#if food.fat}
 													<span class="text-green-400">{formatNutrition(food.fat)}g F</span>
@@ -313,17 +320,17 @@
 					</div>
 				{:else}
 					<div class="p-4 text-center text-neutral-500">
-						<Clock class="h-8 w-8 mx-auto mb-2 text-neutral-600" />
+						<Clock class="mx-auto mb-2 h-8 w-8 text-neutral-600" />
 						<p class="text-sm">No recent foods found</p>
-						<p class="text-xs mt-1">Start logging foods to see them here</p>
+						<p class="mt-1 text-xs">Start logging foods to see them here</p>
 					</div>
 				{/if}
-			<!-- Empty State -->
+				<!-- Empty State -->
 			{:else if searchQuery && !hasSearchResults}
 				<div class="p-4 text-center text-neutral-500">
-					<Search class="h-8 w-8 mx-auto mb-2 text-neutral-600" />
+					<Search class="mx-auto mb-2 h-8 w-8 text-neutral-600" />
 					<p class="text-sm">No foods found for "{searchQuery}"</p>
-					<p class="text-xs mt-1">Try a different search term</p>
+					<p class="mt-1 text-xs">Try a different search term</p>
 				</div>
 			{/if}
 		</div>

@@ -1,17 +1,25 @@
 <script lang="ts">
-	import { createEventDispatcher, onMount, onDestroy } from 'svelte';
+	import { onMount, onDestroy } from 'svelte';
 	import { fly, fade } from 'svelte/transition';
 	import { quintOut } from 'svelte/easing';
 	import { X } from 'lucide-svelte'; // Using Lucide X for consistency
 	import { browser } from '$app/environment'; // Import browser check
-	export let open: boolean = false;
-	export let position: 'bottom' | 'left' | 'right' = 'bottom';
-	export let nonInteractiveBackdrop: boolean = false;
 
-	const dispatch = createEventDispatcher<{ close: void }>();
+	let {
+		open = $bindable(false),
+		position = 'bottom',
+		nonInteractiveBackdrop = false,
+		onclose
+	}: {
+		open?: boolean;
+		position?: 'bottom' | 'left' | 'right';
+		nonInteractiveBackdrop?: boolean;
+		onclose?: () => void;
+	} = $props();
 
 	function closeDrawer() {
-		dispatch('close');
+		open = false;
+		onclose?.();
 	}
 
 	function handleKeydown(event: KeyboardEvent) {
@@ -30,10 +38,10 @@
 		}
 	});
 
-	let drawerElement: HTMLElement;
+	let drawerElement = $state<HTMLElement>();
 
-	$: if (open && drawerElement) {
-		if (browser) {
+	$effect(() => {
+		if (open && drawerElement && browser) {
 			const focusable = drawerElement.querySelector(
 				'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
 			) as HTMLElement;
@@ -43,19 +51,21 @@
 				drawerElement.focus();
 			}
 		}
-	}
+	});
 
-	$: positionClasses = {
-		bottom: 'inset-x-0 bottom-0 rounded-t-2xl border-t', // Simpler border
-		left: 'inset-y-0 left-0 rounded-r-2xl border-r',
-		right: 'inset-y-0 right-0 rounded-l-2xl border-l'
-	}[position];
+	let positionClasses = $derived(
+		{
+			bottom: 'inset-x-0 bottom-0 sm:rounded-t-2xl border-t', // Simpler border, no rounding on mobile
+			left: 'inset-y-0 left-0 rounded-r-2xl border-r',
+			right: 'inset-y-0 right-0 rounded-l-2xl border-l'
+		}[position]
+	);
 
-	$: transformProps = {
+	let transformProps = $derived({
 		bottom: { y: 200, x: 0 },
 		left: { x: -200, y: 0 },
 		right: { x: 200, y: 0 }
-	};
+	});
 </script>
 
 {#if open}
@@ -64,7 +74,7 @@
 		transition:fade={{ duration: 200 }}
 		class="fixed inset-0 z-30 bg-black/70"
 		aria-hidden="true"
-		on:click={nonInteractiveBackdrop ? undefined : closeDrawer}
+		onclick={nonInteractiveBackdrop ? undefined : closeDrawer}
 	></div>
 
 	<!-- Drawer Panel -->
@@ -76,40 +86,41 @@
 			y: position === 'bottom' ? transformProps[position].y : 0,
 			x: position !== 'bottom' ? transformProps[position].x : 0
 		}}
-		class="fixed {positionClasses} z-40 flex max-h-[90vh] w-full flex-col border-neutral-700 bg-neutral-800 p-5 shadow-2xl {position ===
+		class="fixed {positionClasses} z-40 flex max-h-[90vh] w-full flex-col border-neutral-700 bg-neutral-800 p-4 shadow-2xl sm:p-5 {position ===
 		'bottom'
 			? 'sm:mx-auto sm:max-w-md'
 			: 'max-w-xs sm:max-w-sm'}"
+		style={position === 'bottom'
+			? 'padding-bottom: calc(1rem + max(env(safe-area-inset-bottom), 0px));'
+			: ''}
 		role="dialog"
 		aria-modal="true"
 		aria-labelledby="drawer-title"
 		aria-describedby="drawer-description"
 		tabindex="-1"
 	>
-		<slot name="header">
-			<div class="mb-4 flex items-center justify-between">
-				<h3 id="drawer-title" class="text-lg font-semibold text-neutral-100">
-					<slot name="title">Drawer Title</slot>
-				</h3>
-				<button
-					on:click={closeDrawer}
-					class="-mr-1 rounded-full p-1 text-neutral-400 transition-colors hover:text-neutral-200"
-					aria-label="Close Drawer"
-				>
-					<X class="h-5 w-5" />
-				</button>
-			</div>
-		</slot>
+		<div class="mb-3 flex items-center justify-between sm:mb-4">
+			<h3 id="drawer-title" class="text-base font-semibold text-neutral-100 sm:text-lg">
+				<slot name="title">Drawer Title</slot>
+			</h3>
+			<button
+				onclick={closeDrawer}
+				class="-mr-1 rounded-full p-2 text-neutral-400 transition-colors hover:bg-neutral-700 hover:text-neutral-200 active:scale-95"
+				aria-label="Close Drawer"
+			>
+				<X class="h-5 w-5" />
+			</button>
+		</div>
 
 		<div id="drawer-description" class="sr-only">
 			<slot name="description">Drawer content description.</slot>
 		</div>
 
-		<div class="scrollbar-thin-dark -mr-1 flex-grow overflow-y-auto pr-1">
+		<div class="scrollbar-thin-dark pb-safe -mr-1 flex-grow overflow-y-auto pr-1">
 			<slot />
 		</div>
 
-		<div class="mt-auto pt-4">
+		<div class="mt-auto pt-3 sm:pt-4">
 			<slot name="footer" />
 		</div>
 	</div>

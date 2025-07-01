@@ -80,7 +80,7 @@
 			id: 1,
 			type: 'achievement',
 			title: 'Protein Goal Streak',
-			description: 'You\'ve hit your protein target 5 days in a row!',
+			description: "You've hit your protein target 5 days in a row!",
 			icon: Award,
 			color: 'text-green-400',
 			bgColor: 'bg-green-500/10',
@@ -130,7 +130,10 @@
 	}
 </script>
 
-<div class="p-4 pb-28 sm:p-6">
+<div
+	class="p-4 pb-28 sm:p-6"
+	style="padding-bottom: calc(7rem + max(env(safe-area-inset-bottom), 0px));"
+>
 	<header class="mb-6">
 		<h1 class="text-3xl font-bold text-neutral-100 sm:text-4xl">Insights</h1>
 		<p class="mt-2 text-neutral-400">
@@ -147,7 +150,7 @@
 				{weeklyStats.daysLogged}/{weeklyStats.targetDays} days logged
 			</div>
 		</div>
-		
+
 		<div class="grid grid-cols-2 gap-4 sm:grid-cols-4">
 			{#each trends as trend}
 				<div class="rounded-lg border border-neutral-600 bg-neutral-700/50 p-4">

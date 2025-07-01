@@ -1,40 +1,45 @@
 <script lang="ts">
-	import {
-		TrendingUp,
-		Lightbulb,
-		Calendar,
-		Award,
-		AlertCircle
-	} from 'lucide-svelte';
-	import { authStore } from '$lib/stores/auth.ts';
-	import { nutritionStore } from '$lib/stores/nutrition.ts';
-	import { foodStore } from '$lib/stores/food.ts';
+	import { TrendingUp, Lightbulb, Award, AlertCircle } from 'lucide-svelte';
+	import { authStore } from '$lib/stores/auth';
+	import { nutritionStore } from '$lib/stores/nutrition';
+	import { foodStore } from '$lib/stores/food';
 	import NutritionProgress from '$lib/components/NutritionProgress.svelte';
-	
+
 	let { data } = $props();
-	
+
 	// Store state
-	let authState = $state({ user: null, isLoading: false, isAuthenticated: false });
-	let todayTotals = $state({ calories: 0, protein: 0, carbohydrate: 0, fat: 0, fiber: 0, sugar: 0, sodium: 0 });
-	let hasTodayLog = $state(false);
-	let recommendations = $state([]);
-	let summary = $state(null);
+	import type { NutritionRecommendation, ProgressSummary, DailyTotals } from '$lib/types/food';
+	import type { AuthState } from '$lib/stores/auth';
+
+	let authState: AuthState = $state({ user: null, isLoading: false, isAuthenticated: false });
+	let todayTotals: DailyTotals = $state({
+		calories: 0,
+		protein: 0,
+		carbohydrate: 0,
+		fat: 0,
+		fiber: 0,
+		sugar: 0,
+		sodium: 0
+	});
+	let hasTodayLog: boolean = $state(false);
+	let recommendations: NutritionRecommendation[] = $state([]);
+	let summary: ProgressSummary | null = $state(null);
 
 	// Subscribe to stores
 	$effect(() => {
-		const unsubscribeAuth = authStore.subscribe(state => {
+		const unsubscribeAuth = authStore.subscribe((state) => {
 			authState = state;
 		});
-		const unsubscribeTotals = foodStore.todayTotals.subscribe(totals => {
+		const unsubscribeTotals = foodStore.todayTotals.subscribe((totals) => {
 			todayTotals = totals;
 		});
-		const unsubscribeHasLog = foodStore.hasTodayLog.subscribe(hasLog => {
+		const unsubscribeHasLog = foodStore.hasTodayLog.subscribe((hasLog) => {
 			hasTodayLog = hasLog;
 		});
-		const unsubscribeRecommendations = nutritionStore.recommendations.subscribe(recs => {
+		const unsubscribeRecommendations = nutritionStore.recommendations.subscribe((recs) => {
 			recommendations = recs;
 		});
-		const unsubscribeSummary = nutritionStore.summary.subscribe(sum => {
+		const unsubscribeSummary = nutritionStore.summary.subscribe((sum) => {
 			summary = sum;
 		});
 
@@ -62,12 +67,19 @@
 	});
 
 	// Enhanced insights with real data
-	let insights = $derived(() => {
-		const baseInsights = [];
+	interface InsightItem {
+		title: string;
+		description: string;
+		icon: typeof TrendingUp;
+		type: string;
+	}
+
+	let insights = $derived.by(() => {
+		const baseInsights: InsightItem[] = [];
 
 		// Add recommendation-based insights
 		if (recommendations && Array.isArray(recommendations)) {
-			recommendations.forEach(rec => {
+			recommendations.forEach((rec) => {
 				if (rec && rec.type === 'protein' && rec.message && rec.message.includes('Add')) {
 					baseInsights.push({
 						title: 'Protein Goal',
@@ -151,7 +163,10 @@
 	}
 </script>
 
-<div class="p-4 pb-28 sm:p-6">
+<div
+	class="p-4 pb-28 sm:p-6"
+	style="padding-bottom: calc(7rem + max(env(safe-area-inset-bottom), 0px));"
+>
 	<header class="mb-6">
 		<h1 class="text-3xl font-bold text-neutral-100 sm:text-4xl">
 			Welcome back{#if currentUser?.name}, {currentUser.name}{/if}!
@@ -221,10 +236,8 @@
 				<div
 					class="flex cursor-pointer items-start gap-4 rounded-lg border border-neutral-700 bg-neutral-800 p-4 shadow-lg transition-colors hover:border-neutral-600 hover:bg-neutral-700"
 				>
-					<div
-						class="mt-0.5 flex-shrink-0 rounded-md p-2 {getInsightBg(insight.type)}"
-					>
-						<svelte:component this={insight.icon} class="h-5 w-5 {getInsightIcon(insight.type)}" />
+					<div class="mt-0.5 flex-shrink-0 rounded-md p-2 {getInsightBg(insight.type)}">
+						<insight.icon class="h-5 w-5 {getInsightIcon(insight.type)}" />
 					</div>
 					<div class="flex-grow">
 						<h3 class="text-sm font-medium text-neutral-100">{insight.title}</h3>
@@ -239,7 +252,7 @@
 					<div
 						class="flex items-start gap-4 rounded-lg border border-neutral-700 bg-neutral-800 p-4 shadow-lg"
 					>
-						<div class="mt-0.5 flex-shrink-0 rounded-md p-2 bg-blue-500/10">
+						<div class="mt-0.5 flex-shrink-0 rounded-md bg-blue-500/10 p-2">
 							<Lightbulb class="h-5 w-5 text-blue-400" />
 						</div>
 						<div class="flex-grow">

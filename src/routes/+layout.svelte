@@ -1,23 +1,33 @@
 <script lang="ts">
 	import '../app.css';
-	import {
-		LayoutDashboard,
-		LineChart,
-		Plus,
-		LogOut,
-		User,
-		Loader2
-	} from 'lucide-svelte';
+	import { LayoutDashboard, LineChart, Plus, LogOut, User, Loader2 } from 'lucide-svelte';
 	import Drawer from '$lib/components/drawer.svelte';
+	import FoodLogEditModal from '$lib/components/FoodLogEditModal.svelte';
+	import FoodSearchModal from '$lib/components/FoodSearchModal.svelte';
+	import type { FoodDetails, RecentFood, FoodSearchResult } from '$lib/types/food';
+	import type { AuthUser } from '$lib/auth/index.js';
 	import { page } from '$app/stores';
 	import { goto, invalidateAll } from '$app/navigation';
-	import { authStore } from '$lib/stores/auth.ts';
-	import { foodStore } from '$lib/stores/food.ts';
+	import { authStore } from '$lib/stores/auth';
+	import { foodStore } from '$lib/stores/food';
 	import { onMount } from 'svelte';
 
 	let { children, data } = $props();
 	let quickAddDrawerOpen = $state(false);
 	let isInitializing = $state(true);
+	let showFoodLogEditModal = $state(false);
+	let showGlobalSearchModal = $state(false);
+	let foodToEdit: FoodDetails | null = $state(null);
+	let editingEntry: any = $state(null);
+
+	// Handle mobile modal body scroll lock
+	$effect(() => {
+		if (showFoodLogEditModal || showGlobalSearchModal) {
+			document.body.classList.add('modal-open');
+		} else {
+			document.body.classList.remove('modal-open');
+		}
+	});
 
 	// Check if we're on an auth page (login/register)
 	let isAuthPage = $derived($page.url.pathname === '/login' || $page.url.pathname === '/register');
@@ -34,23 +44,27 @@
 	});
 
 	// Store state
-	let authState = $state({ user: null, isLoading: false, isAuthenticated: false });
-	let recentFoods = $state([]);
+	let authState = $state<{ user: AuthUser | null; isLoading: boolean; isAuthenticated: boolean }>({
+		user: null,
+		isLoading: false,
+		isAuthenticated: false
+	});
+	let recentFoods = $state<RecentFood[]>([]);
 	let isLoadingRecent = $state(false);
 	let isLoggingFood = $state(false);
 
 	// Subscribe to stores
 	$effect(() => {
-		const unsubscribeAuth = authStore.subscribe(state => {
+		const unsubscribeAuth = authStore.subscribe((state) => {
 			authState = state;
 		});
-		const unsubscribeRecentFoods = foodStore.recentFoods.subscribe(foods => {
+		const unsubscribeRecentFoods = foodStore.recentFoods.subscribe((foods) => {
 			recentFoods = foods;
 		});
-		const unsubscribeLoadingRecent = foodStore.isLoadingRecent.subscribe(loading => {
+		const unsubscribeLoadingRecent = foodStore.isLoadingRecent.subscribe((loading) => {
 			isLoadingRecent = loading;
 		});
-		const unsubscribeLoggingFood = foodStore.isLoggingFood.subscribe(logging => {
+		const unsubscribeLoggingFood = foodStore.isLoggingFood.subscribe((logging) => {
 			isLoggingFood = logging;
 		});
 
@@ -77,7 +91,7 @@
 	async function handleLogout() {
 		try {
 			authStore.setLoading(true);
-			
+
 			const response = await fetch('/api/auth/logout', {
 				method: 'POST'
 			});
@@ -115,15 +129,41 @@
 		}
 	});
 
-	async function handleQuickAdd(food: typeof recentFoods[0]) {
+	async function handleQuickAdd(food: RecentFood) {
 		try {
-			await foodStore.quickAddFood(food, 1);
+			const foodDetails = await foodStore.getFoodDetails(food.foodId);
+			foodToEdit = foodDetails;
+			editingEntry = null; // Not editing, adding new
+			showFoodLogEditModal = true;
 			quickAddDrawerOpen = false;
-			// Optionally show success message
 		} catch (error) {
 			console.error('Failed to quick add food:', error);
-			// Optionally show error message
 		}
+	}
+
+	async function handleGlobalSearch(event: CustomEvent<FoodSearchResult>) {
+		const food = event.detail;
+		try {
+			const foodDetails = await foodStore.getFoodDetails(food.foodId);
+			foodToEdit = foodDetails;
+			editingEntry = null; // Not editing, adding new
+			showFoodLogEditModal = true;
+		} catch (error) {
+			console.error('Failed to add food from search:', error);
+		}
+	}
+
+	function handleFoodLogModalClose() {
+		showFoodLogEditModal = false;
+		foodToEdit = null;
+		editingEntry = null;
+	}
+
+	function handleFoodLogModalSave() {
+		foodStore.loadTodayLog(); // Refresh the log after saving
+		showFoodLogEditModal = false;
+		foodToEdit = null;
+		editingEntry = null;
 	}
 
 	function getTimeAgo(dateString: string): string {
@@ -143,26 +183,31 @@
 	}
 </script>
 
-<div class="relative min-h-screen bg-neutral-900 text-neutral-200">
+<div
+	class="relative min-h-screen bg-neutral-900 text-neutral-200"
+	style="padding-top: env(safe-area-inset-top);"
+>
 	{@render children()}
 
 	<!-- Only show navigation and quick add for authenticated users -->
 	{#if !isAuthPage && isAuthenticated && !isInitializing}
 		<!-- User Menu (Top Right) -->
-		<div class="fixed top-4 right-4 z-40">
+		<div class="fixed right-4 z-40" style="top: calc(1rem + env(safe-area-inset-top));">
 			<div class="flex items-center gap-3">
-				<span class="text-sm text-neutral-300 hidden sm:block">
+				<span class="hidden text-sm text-neutral-300 sm:block">
 					Welcome, {currentUser?.name || currentUser?.email}
 				</span>
 				<button
 					onclick={handleLogout}
 					disabled={isLoading}
-					class="flex items-center gap-2 rounded-lg bg-neutral-800 border border-neutral-700 px-3 py-2 text-sm text-neutral-300 hover:bg-neutral-700 hover:text-neutral-100 transition-colors disabled:opacity-50"
+					class="flex items-center gap-2 rounded-lg border border-neutral-700 bg-neutral-800 px-3 py-2 text-sm text-neutral-300 transition-colors hover:bg-neutral-700 hover:text-neutral-100 disabled:opacity-50"
 					title="Sign Out"
 				>
 					<User class="h-4 w-4" />
 					{#if isLoading}
-						<div class="h-4 w-4 animate-spin rounded-full border-2 border-neutral-400 border-t-transparent"></div>
+						<div
+							class="h-4 w-4 animate-spin rounded-full border-2 border-neutral-400 border-t-transparent"
+						></div>
 					{:else}
 						<LogOut class="h-4 w-4" />
 					{/if}
@@ -173,6 +218,7 @@
 		<!-- Bottom Navigation -->
 		<footer
 			class="fixed right-0 bottom-0 left-0 z-10 border-t border-neutral-700 bg-neutral-800 shadow-lg"
+			style="padding-bottom: max(env(safe-area-inset-bottom), 0px);"
 		>
 			<nav class="mx-auto flex h-16 max-w-md items-center justify-around">
 				<button
@@ -210,7 +256,8 @@
 		<!-- Quick Add FAB (Drawer Trigger) -->
 		<button
 			onclick={() => (quickAddDrawerOpen = true)}
-			class="focus:ring-opacity-50 fixed right-6 bottom-24 z-30 h-14 w-14 rounded-full bg-blue-600 p-0 text-white shadow-2xl transition-all duration-300 ease-out hover:bg-blue-700 focus:ring-4 focus:ring-blue-500 focus:outline-none sm:right-8 sm:bottom-24 sm:h-16 sm:w-16"
+			class="focus:ring-opacity-50 fixed right-6 z-30 h-14 w-14 rounded-full bg-blue-600 p-0 text-white shadow-2xl transition-all duration-300 ease-out hover:bg-blue-700 focus:ring-4 focus:ring-blue-500 focus:outline-none sm:right-8 sm:h-16 sm:w-16"
+			style="bottom: calc(6rem + max(env(safe-area-inset-bottom), 0px) + 0.5rem);"
 			aria-label="Quick Add Food"
 		>
 			<Plus class="mx-auto h-6 w-6 sm:h-7 sm:w-7" />
@@ -220,7 +267,7 @@
 		<Drawer
 			bind:open={quickAddDrawerOpen}
 			position="bottom"
-			on:close={() => (quickAddDrawerOpen = false)}
+			onclose={() => (quickAddDrawerOpen = false)}
 		>
 			<svelte:fragment slot="title">Quick Add Food</svelte:fragment>
 			<svelte:fragment slot="description">
@@ -252,9 +299,11 @@
 								</div>
 								<div class="flex items-center justify-between">
 									{#if food.brandName}
-										<p class="text-xs text-neutral-400 truncate">{food.brandName}</p>
+										<p class="truncate text-xs text-neutral-400">{food.brandName}</p>
 									{:else}
-										<p class="text-xs text-neutral-400">{food.servingDescription || 'Standard serving'}</p>
+										<p class="text-xs text-neutral-400">
+											{food.servingDescription || 'Standard serving'}
+										</p>
 									{/if}
 									<p class="text-xs text-neutral-500">{getTimeAgo(food.lastUsed)}</p>
 								</div>
@@ -268,9 +317,9 @@
 					{/each}
 				{:else}
 					<div class="p-4 text-center text-neutral-500">
-						<Plus class="h-8 w-8 mx-auto mb-2 text-neutral-600" />
+						<Plus class="mx-auto mb-2 h-8 w-8 text-neutral-600" />
 						<p class="text-sm">No recent foods found</p>
-						<p class="text-xs mt-1">Start logging foods to see them here</p>
+						<p class="mt-1 text-xs">Start logging foods to see them here</p>
 					</div>
 				{/if}
 			</div>
@@ -279,7 +328,7 @@
 				<button
 					onclick={() => {
 						quickAddDrawerOpen = false;
-						goto('/food-log');
+						showGlobalSearchModal = true;
 					}}
 					class="w-full rounded-lg bg-blue-600 py-3 font-medium text-white transition-colors hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-neutral-800 focus:outline-none"
 				>
@@ -295,3 +344,20 @@
 		</Drawer>
 	{/if}
 </div>
+
+<!-- Global Search Modal -->
+<FoodSearchModal
+	bind:open={showGlobalSearchModal}
+	title="Search All Foods"
+	description="Find any food to add to your log"
+	on:select={handleGlobalSearch}
+	on:close={() => (showGlobalSearchModal = false)}
+/>
+
+<FoodLogEditModal
+	bind:open={showFoodLogEditModal}
+	foodDetails={foodToEdit}
+	foodLog={editingEntry}
+	on:close={handleFoodLogModalClose}
+	on:save={handleFoodLogModalSave}
+/>

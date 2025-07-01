@@ -1,6 +1,6 @@
 import { writable, derived, type Writable, type Readable } from 'svelte/store';
-import { authStore } from './auth.ts';
-import { foodStore } from './food.ts';
+import { authStore } from './auth';
+import { foodStore } from './food';
 import { get } from 'svelte/store';
 import type {
 	NutritionGoals,

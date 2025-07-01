@@ -14,27 +14,39 @@ export interface Serving {
 	servingDescription: string;
 	servingUrl: string;
 	metricServingAmount?: string | null;
+	metric_serving_amount?: string | null; // Added snake_case
 	metricServingUnit?: string | null;
+	metric_serving_unit?: string | null; // Added snake_case
 	numberOfUnits?: string | null;
+	number_of_units?: string | null; // Added snake_case
 	measurementDescription?: string | null;
+	measurement_description?: string | null; // Added snake_case
 	isDefault?: number;
 	calories?: string | null;
 	carbohydrate?: string | null;
 	protein?: string | null;
 	fat?: string | null;
 	saturatedFat?: string | null;
+	saturated_fat?: string | null; // Added snake_case
 	polyunsaturatedFat?: string | null;
+	polyunsaturated_fat?: string | null; // Added snake_case
 	monounsaturatedFat?: string | null;
+	monounsaturated_fat?: string | null; // Added snake_case
 	transFat?: string | null;
+	trans_fat?: string | null; // Added snake_case
 	cholesterol?: string | null;
 	sodium?: string | null;
 	potassium?: string | null;
 	fiber?: string | null;
 	sugar?: string | null;
 	addedSugars?: string | null;
+	added_sugars?: string | null; // Added snake_case
 	vitaminD?: string | null;
+	vitamin_d?: string | null; // Added snake_case
 	vitaminA?: string | null;
+	vitamin_a?: string | null; // Added snake_case
 	vitaminC?: string | null;
+	vitamin_c?: string | null; // Added snake_case
 	calcium?: string | null;
 	iron?: string | null;
 }
@@ -69,7 +81,29 @@ export interface FoodDetails extends Food {
 	servings: ProcessedServing[];
 }
 
-export interface ProcessedServing extends Omit<Serving, 'calories' | 'protein' | 'carbohydrate' | 'fat' | 'fiber' | 'sugar' | 'sodium' | 'saturatedFat' | 'cholesterol'> {
+export interface ProcessedServing
+	extends Omit<
+		Serving,
+		| 'calories'
+		| 'protein'
+		| 'carbohydrate'
+		| 'fat'
+		| 'fiber'
+		| 'sugar'
+		| 'sodium'
+		| 'saturatedFat'
+		| 'cholesterol'
+		| 'polyunsaturatedFat'
+		| 'monounsaturatedFat'
+		| 'transFat'
+		| 'vitaminD'
+		| 'calcium'
+		| 'iron'
+		| 'potassium'
+		| 'addedSugars'
+		| 'vitaminA'
+		| 'vitaminC'
+	> {
 	calories?: number | null;
 	protein?: number | null;
 	carbohydrate?: number | null;
@@ -171,6 +205,14 @@ export interface LogFoodRequest {
 	meal?: string | undefined;
 }
 
+export interface UpdateLogEntryRequest {
+	id: number;
+	servingId?: number;
+	quantity?: number;
+	date?: string;
+	meal?: string | null;
+}
+
 export interface SearchFoodsRequest {
 	q: string;
 	limit?: number;
@@ -187,7 +229,7 @@ export interface GetFoodLogRequest {
 }
 
 // API Response wrapper types
-export interface ApiResponse<T = any> {
+export interface ApiResponse<T = unknown> {
 	success: boolean;
 	data?: T;
 	error?: string;

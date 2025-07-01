@@ -7,16 +7,19 @@ import type { RequestHandler } from './$types';
 export const POST: RequestHandler = async ({ request, locals }) => {
 	// Check authentication
 	if (!locals.user) {
-		return json({
-			success: false,
-			error: 'Authentication required'
-		}, { status: 401 });
+		return json(
+			{
+				success: false,
+				error: 'Authentication required'
+			},
+			{ status: 401 }
+		);
 	}
 
 	const userId = locals.user.id;
 
 	try {
-		const requestBody = await request.json() as {
+		const requestBody = (await request.json()) as {
 			foodId?: number;
 			servingId?: number;
 			quantity?: number;
@@ -24,76 +27,81 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			meal?: string;
 		};
 		console.log('Food logging request body:', JSON.stringify(requestBody, null, 2));
-		
+
 		const { foodId, servingId, quantity, date, meal } = requestBody;
 
 		// Validate required fields
-		if (typeof foodId !== 'number' || typeof servingId !== 'number' || typeof quantity !== 'number') {
-			return json({
-				success: false,
-				error: 'foodId, servingId, and quantity are required and must be numbers'
-			}, { status: 400 });
+		if (
+			typeof foodId !== 'number' ||
+			typeof servingId !== 'number' ||
+			typeof quantity !== 'number'
+		) {
+			return json(
+				{
+					success: false,
+					error: 'foodId, servingId, and quantity are required and must be numbers'
+				},
+				{ status: 400 }
+			);
 		}
 
 		// Validate quantity is positive
 		if (quantity <= 0) {
-			return json({
-				success: false,
-				error: 'Quantity must be a positive number'
-			}, { status: 400 });
+			return json(
+				{
+					success: false,
+					error: 'Quantity must be a positive number'
+				},
+				{ status: 400 }
+			);
 		}
 
 		// Use provided date or default to today
 		const logDate = date || new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
 
 		// Verify the food exists
-		const foodExists = await db
-			.select()
-			.from(food)
-			.where(eq(food.foodId, foodId))
-			.limit(1);
+		const foodExists = await db.select().from(food).where(eq(food.foodId, foodId)).limit(1);
 
 		if (foodExists.length === 0) {
-			return json({
-				success: false,
-				error: 'Food not found'
-			}, { status: 404 });
+			return json(
+				{
+					success: false,
+					error: 'Food not found'
+				},
+				{ status: 404 }
+			);
 		}
 
 		// Check if serving exists
 		let servingExists = await db
 			.select()
 			.from(serving)
-			.where(and(
-				eq(serving.servingId, servingId),
-				eq(serving.foodId, foodId)
-			))
+			.where(and(eq(serving.servingId, servingId), eq(serving.foodId, foodId)))
 			.limit(1);
 
 		// If serving doesn't exist OR has invalid nutrition data (NaN/null), try to re-fetch
-		const needsRefresh = servingExists.length === 0 || 
-			(servingExists[0] && (
-				servingExists[0].calories === null || 
-				isNaN(servingExists[0].calories) ||
-				servingExists[0].protein === null ||
-				isNaN(servingExists[0].protein)
-			));
+		const needsRefresh =
+			servingExists.length === 0 ||
+			(servingExists[0] &&
+				(servingExists[0].calories === null ||
+					isNaN(servingExists[0].calories) ||
+					servingExists[0].protein === null ||
+					isNaN(servingExists[0].protein)));
 
 		if (needsRefresh) {
 			console.log(`Serving ${servingId} needs refresh, attempting to re-fetch from FatSecret...`);
-			
+
 			// Try to re-fetch food details which will update the serving data
 			try {
-				const response = await fetch(`${process.env.NODE_ENV === 'development' ? 'http://localhost:5173' : ''}/api/foods/${foodId}`);
+				const response = await fetch(
+					`${process.env.NODE_ENV === 'development' ? 'http://localhost:5173' : ''}/api/foods/${foodId}`
+				);
 				if (response.ok) {
 					// Try to find the serving again after refresh
 					servingExists = await db
 						.select()
 						.from(serving)
-						.where(and(
-							eq(serving.servingId, servingId),
-							eq(serving.foodId, foodId)
-						))
+						.where(and(eq(serving.servingId, servingId), eq(serving.foodId, foodId)))
 						.limit(1);
 				}
 			} catch (error) {
@@ -102,22 +110,29 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		}
 
 		if (servingExists.length === 0) {
-			return json({
-				success: false,
-				error: 'Serving not found for this food'
-			}, { status: 404 });
+			return json(
+				{
+					success: false,
+					error: 'Serving not found for this food'
+				},
+				{ status: 404 }
+			);
 		}
 
 		const actualServingId = servingId;
 
 		// Create the food log entry
-		const newLogEntry = await db.insert(foodLog).values({
-			userId,
-			foodId,
-			servingId: actualServingId,
-			quantity,
-			date: logDate
-		}).returning();
+		const newLogEntry = await db
+			.insert(foodLog)
+			.values({
+				userId,
+				foodId,
+				servingId: actualServingId,
+				quantity,
+				date: logDate,
+				meal: meal || null
+			})
+			.returning();
 
 		// Get the complete logged food information for response
 		const loggedFoodInfo = await db
@@ -143,7 +158,8 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				sugar: serving.sugar,
 				sodium: serving.sodium,
 				saturatedFat: serving.saturatedFat,
-				cholesterol: serving.cholesterol
+				cholesterol: serving.cholesterol,
+				meal: foodLog.meal
 			})
 			.from(foodLog)
 			.innerJoin(food, eq(foodLog.foodId, food.foodId))
@@ -189,7 +205,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				quantity: loggedFood.quantity,
 				date: loggedFood.date,
 				loggedAt: loggedFood.loggedAt,
-				meal: meal || null,
+				meal: loggedFood.meal,
 				food: {
 					foodName: loggedFood.foodName,
 					brandName: loggedFood.brandName,
@@ -214,13 +230,15 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				nutrition: nutritionData
 			}
 		});
-
 	} catch (error) {
 		console.error('Error logging food:', error);
-		return json({
-			success: false,
-			error: 'Failed to log food'
-		}, { status: 500 });
+		return json(
+			{
+				success: false,
+				error: 'Failed to log food'
+			},
+			{ status: 500 }
+		);
 	}
 };
 
@@ -228,10 +246,13 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 export const GET: RequestHandler = async ({ url, locals }) => {
 	// Check authentication
 	if (!locals.user) {
-		return json({
-			success: false,
-			error: 'Authentication required'
-		}, { status: 401 });
+		return json(
+			{
+				success: false,
+				error: 'Authentication required'
+			},
+			{ status: 401 }
+		);
 	}
 
 	const userId = locals.user.id;
@@ -248,6 +269,7 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 				quantity: foodLog.quantity,
 				loggedAt: foodLog.loggedAt,
 				date: foodLog.date,
+				meal: foodLog.meal,
 				// Food info
 				foodName: food.foodName,
 				brandName: food.brandName,
@@ -267,15 +289,12 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 			.from(foodLog)
 			.innerJoin(food, eq(foodLog.foodId, food.foodId))
 			.innerJoin(serving, eq(foodLog.servingId, serving.servingId))
-			.where(and(
-				eq(foodLog.userId, userId),
-				eq(foodLog.date, date)
-			))
+			.where(and(eq(foodLog.userId, userId), eq(foodLog.date, date)))
 			.orderBy(desc(foodLog.loggedAt))
 			.limit(limit);
 
 		// Process the results to include calculated nutrition
-		const processedLogs = foodLogs.map(log => {
+		const processedLogs = foodLogs.map((log) => {
 			const nutritionData = {
 				calories: (log.calories ?? 0) * log.quantity,
 				protein: (log.protein ?? 0) * log.quantity,
@@ -296,6 +315,7 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 				quantity: log.quantity,
 				date: log.date,
 				loggedAt: log.loggedAt,
+				meal: log.meal,
 				food: {
 					foodName: log.foodName,
 					brandName: log.brandName,
@@ -320,27 +340,30 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 		});
 
 		// Calculate daily totals
-		const dailyTotals = processedLogs.reduce((totals, log) => ({
-			calories: totals.calories + log.nutrition.calories,
-			protein: totals.protein + log.nutrition.protein,
-			carbohydrate: totals.carbohydrate + log.nutrition.carbohydrate,
-			fat: totals.fat + log.nutrition.fat,
-			fiber: totals.fiber + log.nutrition.fiber,
-			sugar: totals.sugar + log.nutrition.sugar,
-			sodium: totals.sodium + log.nutrition.sodium,
-			saturatedFat: totals.saturatedFat + log.nutrition.saturatedFat,
-			cholesterol: totals.cholesterol + log.nutrition.cholesterol
-		}), {
-			calories: 0,
-			protein: 0,
-			carbohydrate: 0,
-			fat: 0,
-			fiber: 0,
-			sugar: 0,
-			sodium: 0,
-			saturatedFat: 0,
-			cholesterol: 0
-		});
+		const dailyTotals = processedLogs.reduce(
+			(totals, log) => ({
+				calories: totals.calories + log.nutrition.calories,
+				protein: totals.protein + log.nutrition.protein,
+				carbohydrate: totals.carbohydrate + log.nutrition.carbohydrate,
+				fat: totals.fat + log.nutrition.fat,
+				fiber: totals.fiber + log.nutrition.fiber,
+				sugar: totals.sugar + log.nutrition.sugar,
+				sodium: totals.sodium + log.nutrition.sodium,
+				saturatedFat: totals.saturatedFat + log.nutrition.saturatedFat,
+				cholesterol: totals.cholesterol + log.nutrition.cholesterol
+			}),
+			{
+				calories: 0,
+				protein: 0,
+				carbohydrate: 0,
+				fat: 0,
+				fiber: 0,
+				sugar: 0,
+				sodium: 0,
+				saturatedFat: 0,
+				cholesterol: 0
+			}
+		);
 
 		return json({
 			success: true,
@@ -349,13 +372,186 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 			dailyTotals,
 			totalEntries: processedLogs.length
 		});
-
 	} catch (error) {
 		console.error('Error fetching food log:', error);
+		return json(
+			{
+				success: false,
+				error: 'Failed to fetch food log'
+			},
+			{ status: 500 }
+		);
+	}
+};
+
+// PUT route to update a food log entry
+export const PUT: RequestHandler = async ({ request, locals }) => {
+	// Check authentication
+	if (!locals.user) {
+		return json(
+			{
+				success: false,
+				error: 'Authentication required'
+			},
+			{ status: 401 }
+		);
+	}
+
+	const userId = locals.user.id;
+
+	try {
+		const requestBody = (await request.json()) as {
+			id: number;
+			servingId?: number;
+			quantity?: number;
+			date?: string;
+			meal?: string;
+		};
+
+		const { id, servingId, quantity, date, meal } = requestBody;
+
+		// Validate required fields
+		if (typeof id !== 'number') {
+			return json(
+				{
+					success: false,
+					error: 'Entry ID is required'
+				},
+				{ status: 400 }
+			);
+		}
+
+		// Verify the log entry belongs to the user
+		const existingEntry = await db
+			.select()
+			.from(foodLog)
+			.where(and(eq(foodLog.id, id), eq(foodLog.userId, userId)))
+			.limit(1);
+
+		if (existingEntry.length === 0) {
+			return json(
+				{
+					success: false,
+					error: 'Log entry not found or unauthorized'
+				},
+				{ status: 404 }
+			);
+		}
+
+		// Build update object with only provided fields
+		const updateData: any = {};
+		if (servingId !== undefined) updateData.servingId = servingId;
+		if (quantity !== undefined) {
+			if (quantity <= 0) {
+				return json(
+					{
+						success: false,
+						error: 'Quantity must be a positive number'
+					},
+					{ status: 400 }
+				);
+			}
+			updateData.quantity = quantity;
+		}
+		if (date !== undefined) updateData.date = date;
+		if (meal !== undefined) updateData.meal = meal;
+
+		// Update the entry
+		await db
+			.update(foodLog)
+			.set(updateData)
+			.where(and(eq(foodLog.id, id), eq(foodLog.userId, userId)));
+
+		// Get the updated entry with complete information
+		const updatedEntry = await db
+			.select({
+				id: foodLog.id,
+				userId: foodLog.userId,
+				foodId: foodLog.foodId,
+				servingId: foodLog.servingId,
+				quantity: foodLog.quantity,
+				loggedAt: foodLog.loggedAt,
+				date: foodLog.date,
+				meal: foodLog.meal,
+				// Food info
+				foodName: food.foodName,
+				brandName: food.brandName,
+				foodType: food.foodType,
+				// Serving info
+				servingDescription: serving.servingDescription,
+				calories: serving.calories,
+				protein: serving.protein,
+				carbohydrate: serving.carbohydrate,
+				fat: serving.fat,
+				fiber: serving.fiber,
+				sugar: serving.sugar,
+				sodium: serving.sodium,
+				saturatedFat: serving.saturatedFat,
+				cholesterol: serving.cholesterol
+			})
+			.from(foodLog)
+			.innerJoin(food, eq(foodLog.foodId, food.foodId))
+			.innerJoin(serving, eq(foodLog.servingId, serving.servingId))
+			.where(eq(foodLog.id, id))
+			.limit(1);
+
+		const entry = updatedEntry[0];
+
+		// Calculate actual nutrition values based on quantity
+		const nutritionData = {
+			calories: (entry.calories ?? 0) * entry.quantity,
+			protein: (entry.protein ?? 0) * entry.quantity,
+			carbohydrate: (entry.carbohydrate ?? 0) * entry.quantity,
+			fat: (entry.fat ?? 0) * entry.quantity,
+			fiber: (entry.fiber ?? 0) * entry.quantity,
+			sugar: (entry.sugar ?? 0) * entry.quantity,
+			sodium: (entry.sodium ?? 0) * entry.quantity,
+			saturatedFat: (entry.saturatedFat ?? 0) * entry.quantity,
+			cholesterol: (entry.cholesterol ?? 0) * entry.quantity
+		};
+
 		return json({
-			success: false,
-			error: 'Failed to fetch food log'
-		}, { status: 500 });
+			success: true,
+			logEntry: {
+				id: entry.id,
+				userId: entry.userId,
+				foodId: entry.foodId,
+				servingId: entry.servingId,
+				quantity: entry.quantity,
+				date: entry.date,
+				loggedAt: entry.loggedAt,
+				meal: entry.meal,
+				food: {
+					foodName: entry.foodName,
+					brandName: entry.brandName,
+					foodType: entry.foodType
+				},
+				serving: {
+					servingDescription: entry.servingDescription,
+					baseNutrition: {
+						calories: entry.calories ?? 0,
+						protein: entry.protein ?? 0,
+						carbohydrate: entry.carbohydrate ?? 0,
+						fat: entry.fat ?? 0,
+						fiber: entry.fiber ?? 0,
+						sugar: entry.sugar ?? 0,
+						sodium: entry.sodium ?? 0,
+						saturatedFat: entry.saturatedFat ?? 0,
+						cholesterol: entry.cholesterol ?? 0
+					}
+				},
+				nutrition: nutritionData
+			}
+		});
+	} catch (error) {
+		console.error('Error updating food log entry:', error);
+		return json(
+			{
+				success: false,
+				error: 'Failed to update food log entry'
+			},
+			{ status: 500 }
+		);
 	}
 };
 
@@ -363,20 +559,26 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 export const DELETE: RequestHandler = async ({ url, locals }) => {
 	// Check authentication
 	if (!locals.user) {
-		return json({
-			success: false,
-			error: 'Authentication required'
-		}, { status: 401 });
+		return json(
+			{
+				success: false,
+				error: 'Authentication required'
+			},
+			{ status: 401 }
+		);
 	}
 
 	const userId = locals.user.id;
 	const logId = url.searchParams.get('id');
 
 	if (!logId) {
-		return json({
-			success: false,
-			error: 'Log ID is required'
-		}, { status: 400 });
+		return json(
+			{
+				success: false,
+				error: 'Log ID is required'
+			},
+			{ status: 400 }
+		);
 	}
 
 	try {
@@ -384,37 +586,36 @@ export const DELETE: RequestHandler = async ({ url, locals }) => {
 		const logEntry = await db
 			.select()
 			.from(foodLog)
-			.where(and(
-				eq(foodLog.id, parseInt(logId)),
-				eq(foodLog.userId, userId)
-			))
+			.where(and(eq(foodLog.id, parseInt(logId)), eq(foodLog.userId, userId)))
 			.limit(1);
 
 		if (logEntry.length === 0) {
-			return json({
-				success: false,
-				error: 'Log entry not found or unauthorized'
-			}, { status: 404 });
+			return json(
+				{
+					success: false,
+					error: 'Log entry not found or unauthorized'
+				},
+				{ status: 404 }
+			);
 		}
 
 		// Delete the log entry
 		await db
 			.delete(foodLog)
-			.where(and(
-				eq(foodLog.id, parseInt(logId)),
-				eq(foodLog.userId, userId)
-			));
+			.where(and(eq(foodLog.id, parseInt(logId)), eq(foodLog.userId, userId)));
 
 		return json({
 			success: true,
 			message: 'Food log entry deleted successfully'
 		});
-
 	} catch (error) {
 		console.error('Error deleting food log:', error);
-		return json({
-			success: false,
-			error: 'Failed to delete food log entry'
-		}, { status: 500 });
+		return json(
+			{
+				success: false,
+				error: 'Failed to delete food log entry'
+			},
+			{ status: 500 }
+		);
 	}
 };

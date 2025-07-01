@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { createEventDispatcher } from 'svelte';
 	import { MoreVertical, Edit3, Trash2, Copy, Clock } from 'lucide-svelte';
-	import { foodStore } from '$lib/stores/food.ts';
-	import type { FoodLogEntry } from '$lib/types/food.ts';
+	import { foodStore } from '$lib/stores/food';
+	import type { FoodLogEntry } from '$lib/types/food';
 
 	// Props
 	interface Props {
@@ -12,12 +12,7 @@
 		showActions?: boolean;
 	}
 
-	let {
-		entry,
-		showMeal = true,
-		showTime = true,
-		showActions = true
-	}: Props = $props();
+	let { entry, showMeal = true, showTime = true, showActions = true }: Props = $props();
 
 	// Component state
 	let showDropdown = $state(false);
@@ -35,7 +30,7 @@
 
 	// Subscribe to stores
 	$effect(() => {
-		const unsubscribe = foodStore.isDeletingLog.subscribe(deleting => {
+		const unsubscribe = foodStore.isDeletingLog.subscribe((deleting) => {
 			isDeletingFromStore = deleting;
 		});
 
@@ -59,7 +54,7 @@
 
 	function getMealEmoji(meal?: string | null): string {
 		if (!meal) return '🍽️';
-		
+
 		switch (meal.toLowerCase()) {
 			case 'breakfast':
 				return '🌅';
@@ -82,16 +77,21 @@
 
 	async function handleDelete() {
 		if (isDeleting || isDeletingFromStore) return;
-		
+
 		isDeleting = true;
 		showDropdown = false;
 
 		try {
-			await foodStore.deleteLogEntry(entry.id);
-			dispatch('delete', entry.id);
+			const success = await foodStore.deleteLogEntry(entry.id);
+			if (success) {
+				dispatch('delete', entry.id);
+			} else {
+				console.error('Failed to delete entry: Server returned failure');
+				// Could show a user-friendly error message here
+			}
 		} catch (error) {
 			console.error('Failed to delete entry:', error);
-			// Could show a toast notification here
+			// Could show a user-friendly error message here
 		} finally {
 			isDeleting = false;
 		}
@@ -112,10 +112,6 @@
 		showDropdown = !showDropdown;
 	}
 
-	function handleClickOutside() {
-		showDropdown = false;
-	}
-
 	// Close dropdown when clicking outside
 	$effect(() => {
 		if (showDropdown) {
@@ -128,17 +124,19 @@
 	});
 </script>
 
-<div class="rounded-lg border border-neutral-700 bg-neutral-800 p-4 transition-colors hover:border-neutral-600">
+<div
+	class="rounded-lg border border-neutral-700 bg-neutral-800 p-4 transition-colors hover:border-neutral-600"
+>
 	<div class="flex items-start justify-between">
-		<div class="flex-grow min-w-0">
-			<div class="flex items-center gap-2 mb-1">
+		<div class="min-w-0 flex-grow">
+			<div class="mb-1 flex items-center gap-2">
 				{#if showMeal && entry.meal}
 					<span class="text-lg" title={getMealName(entry.meal)}>
 						{getMealEmoji(entry.meal)}
 					</span>
 				{/if}
 				<div class="min-w-0 flex-grow">
-					<h3 class="font-medium text-neutral-100 truncate">{entry.food.foodName}</h3>
+					<h3 class="truncate font-medium text-neutral-100">{entry.food.foodName}</h3>
 					<div class="flex items-center gap-2 text-sm text-neutral-400">
 						{#if entry.food.brandName}
 							<span class="truncate">{entry.food.brandName}</span>
@@ -151,8 +149,8 @@
 					</div>
 				</div>
 			</div>
-			
-			<div class="flex items-center gap-4 text-sm mt-3">
+
+			<div class="mt-3 flex items-center gap-4 text-sm">
 				{#if showTime}
 					<div class="flex items-center gap-1 text-neutral-500">
 						<Clock class="h-3 w-3" />
@@ -168,13 +166,14 @@
 							<span class="text-sky-400">{formatNutrition(entry.nutrition.protein)}g P</span>
 						{/if}
 						{#if entry.nutrition.carbohydrate}
-							<span class="text-purple-400">{formatNutrition(entry.nutrition.carbohydrate)}g C</span>
+							<span class="text-purple-400">{formatNutrition(entry.nutrition.carbohydrate)}g C</span
+							>
 						{/if}
 						{#if entry.nutrition.fat}
 							<span class="text-green-400">{formatNutrition(entry.nutrition.fat)}g F</span>
 						{/if}
 					{:else}
-						<span class="text-neutral-500 italic text-xs">Nutrition data being processed...</span>
+						<span class="text-xs text-neutral-500 italic">Nutrition data being processed...</span>
 					{/if}
 				</div>
 			</div>
@@ -182,29 +181,33 @@
 
 		{#if showActions}
 			<div class="relative ml-4">
-				<button 
-					class="rounded-full p-1 text-neutral-400 hover:bg-neutral-700 hover:text-neutral-200 transition-colors disabled:opacity-50"
+				<button
+					class="rounded-full p-1 text-neutral-400 transition-colors hover:bg-neutral-700 hover:text-neutral-200 disabled:opacity-50"
 					onclick={handleDropdownClick}
 					disabled={isDeleting || isDeletingFromStore}
 				>
 					{#if isDeleting || isDeletingFromStore}
-						<div class="h-4 w-4 animate-spin rounded-full border-2 border-neutral-400 border-t-transparent"></div>
+						<div
+							class="h-4 w-4 animate-spin rounded-full border-2 border-neutral-400 border-t-transparent"
+						></div>
 					{:else}
 						<MoreVertical class="h-4 w-4" />
 					{/if}
 				</button>
 
 				{#if showDropdown}
-					<div class="absolute right-0 top-full mt-1 z-10 w-48 rounded-lg border border-neutral-600 bg-neutral-700 py-1 shadow-xl">
+					<div
+						class="absolute top-full right-0 z-10 mt-1 w-48 rounded-lg border border-neutral-600 bg-neutral-700 py-1 shadow-xl"
+					>
 						<button
-							class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-neutral-200 hover:bg-neutral-600 transition-colors"
+							class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-neutral-200 transition-colors hover:bg-neutral-600"
 							onclick={handleEdit}
 						>
 							<Edit3 class="h-4 w-4" />
 							Edit Entry
 						</button>
 						<button
-							class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-neutral-200 hover:bg-neutral-600 transition-colors"
+							class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-neutral-200 transition-colors hover:bg-neutral-600"
 							onclick={handleDuplicate}
 						>
 							<Copy class="h-4 w-4" />
@@ -212,7 +215,7 @@
 						</button>
 						<div class="my-1 border-t border-neutral-600"></div>
 						<button
-							class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-red-400 hover:bg-neutral-600 hover:text-red-300 transition-colors"
+							class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-red-400 transition-colors hover:bg-neutral-600 hover:text-red-300"
 							onclick={handleDelete}
 						>
 							<Trash2 class="h-4 w-4" />

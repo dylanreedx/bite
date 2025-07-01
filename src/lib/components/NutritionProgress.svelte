@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { Flame, Zap, Brain, Droplets } from 'lucide-svelte';
-	import { nutritionStore } from '$lib/stores/nutrition.ts';
-	import type { NutritionGoals, NutrientProgress } from '$lib/types/food.ts';
+	import { nutritionStore } from '$lib/stores/nutrition';
+	import type { NutrientProgress, ProgressSummary } from '$lib/types/food';
 
 	// Props
 	interface Props {
@@ -9,10 +9,7 @@
 		compact?: boolean;
 	}
 
-	let {
-		showGoals = true,
-		compact = false
-	}: Props = $props();
+	let { showGoals = true, compact = false }: Props = $props();
 
 	// Store state with proper initial values
 	let progress = $state({
@@ -33,21 +30,21 @@
 		sugar: 50,
 		sodium: 2300
 	});
-	let summary = $state(null);
+	let summary: ProgressSummary | null = $state(null);
 
 	// Subscribe to stores
 	$effect(() => {
-		const unsubscribeProgress = nutritionStore.progress.subscribe(prog => {
+		const unsubscribeProgress = nutritionStore.progress.subscribe((prog) => {
 			if (prog && typeof prog === 'object') {
 				progress = prog;
 			}
 		});
-		const unsubscribeGoals = nutritionStore.goals.subscribe(g => {
+		const unsubscribeGoals = nutritionStore.goals.subscribe((g) => {
 			if (g && typeof g === 'object') {
 				goals = g;
 			}
 		});
-		const unsubscribeSummary = nutritionStore.summary.subscribe(sum => {
+		const unsubscribeSummary = nutritionStore.summary.subscribe((sum) => {
 			summary = sum;
 		});
 
@@ -129,23 +126,25 @@
 		{/if}
 	</div>
 
-	<div class="grid grid-cols-1 gap-5 {compact ? 'sm:grid-cols-2' : 'sm:grid-cols-2 lg:grid-cols-4'}">
+	<div
+		class="grid grid-cols-1 gap-5 {compact ? 'sm:grid-cols-2' : 'sm:grid-cols-2 lg:grid-cols-4'}"
+	>
 		{#each Object.entries(macroConfig) as [nutrient, config] (nutrient)}
 			{@const nutrientProgress = progress[nutrient as keyof typeof progress]}
 			{@const goal = goals[nutrient as keyof typeof goals]}
-			
+
 			{#if nutrientProgress && goal}
 				<div class="flex items-center gap-3">
 					<div class="rounded-lg bg-neutral-700 p-2.5 {config.color}">
-						<svelte:component this={config.icon} class="h-5 w-5 sm:h-6 sm:w-6" />
+						<config.icon class="h-5 w-5 sm:h-6 sm:w-6" />
 					</div>
-					<div class="flex-grow min-w-0">
+					<div class="min-w-0 flex-grow">
 						<div class="mb-1 flex items-baseline justify-between">
-							<h3 class="text-sm font-medium text-neutral-200 capitalize truncate">
+							<h3 class="truncate text-sm font-medium text-neutral-200 capitalize">
 								{nutrient === 'carbohydrate' ? 'Carbs' : nutrient}
 							</h3>
 							{#if showGoals}
-								<p class="text-xs text-neutral-400 ml-2">
+								<p class="ml-2 text-xs text-neutral-400">
 									{formatNumber(nutrientProgress.current)} / {formatNumber(goal)}{config.unit}
 								</p>
 							{:else}
@@ -156,13 +155,15 @@
 						</div>
 						<div class="h-2 w-full rounded-full bg-neutral-600">
 							<div
-								class="{getProgressColor(nutrientProgress.percentage)} h-2 rounded-full transition-all duration-500 ease-out"
+								class="{getProgressColor(
+									nutrientProgress.percentage
+								)} h-2 rounded-full transition-all duration-500 ease-out"
 								style="width: {Math.min(nutrientProgress.percentage, 100)}%"
 							></div>
 						</div>
 						{#if !compact}
 							<div class="mt-1 text-xs {getStatusColor(nutrientProgress)}">
-								{Math.round(nutrientProgress.percentage)}% 
+								{Math.round(nutrientProgress.percentage)}%
 								{#if nutrientProgress.exceeded}
 									(over goal)
 								{:else if nutrientProgress.percentage >= 100}
@@ -177,22 +178,26 @@
 	</div>
 
 	{#if !compact && summary}
-		<div class="mt-5 pt-4 border-t border-neutral-700">
+		<div class="mt-5 border-t border-neutral-700 pt-4">
 			<div class="flex items-center justify-between text-sm">
 				<span class="text-neutral-400">Overall Progress</span>
-				<span class="font-medium {
-					summary.status === 'excellent' ? 'text-green-400' :
-					summary.status === 'good' ? 'text-blue-400' :
-					summary.status === 'fair' ? 'text-yellow-400' :
-					'text-red-400'
-				}">
-					{Math.round(summary.averageProgress)}% 
-					({summary.status.replace('-', ' ')})
+				<span
+					class="font-medium {summary.status === 'excellent'
+						? 'text-green-400'
+						: summary.status === 'good'
+							? 'text-blue-400'
+							: summary.status === 'fair'
+								? 'text-yellow-400'
+								: 'text-red-400'}"
+				>
+					{Math.round(summary.averageProgress)}% ({summary.status.replace('-', ' ')})
 				</span>
 			</div>
 			<div class="mt-2 h-2 w-full rounded-full bg-neutral-600">
 				<div
-					class="{getProgressColor(summary.averageProgress)} h-2 rounded-full transition-all duration-500 ease-out"
+					class="{getProgressColor(
+						summary.averageProgress
+					)} h-2 rounded-full transition-all duration-500 ease-out"
 					style="width: {Math.min(summary.averageProgress, 100)}%"
 				></div>
 			</div>

@@ -56,7 +56,7 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 				carbohydrate: food.carbohydrate ?? 0,
 				fat: food.fat ?? 0,
 				logCount: Number(food.logCount),
-				lastUsed: new Date(food.lastUsed).toISOString()
+				lastUsed: food.lastUsed ? new Date(food.lastUsed).toISOString() : new Date().toISOString()
 			}));
 
 			return json({
@@ -101,7 +101,7 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 				protein: food.protein ?? 0,
 				carbohydrate: food.carbohydrate ?? 0,
 				fat: food.fat ?? 0,
-				lastUsed: new Date(food.lastUsed).toISOString()
+				lastUsed: food.lastUsed ? new Date(food.lastUsed).toISOString() : new Date().toISOString()
 			}));
 
 			return json({

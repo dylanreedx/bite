@@ -1,7 +1,7 @@
 import { writable } from 'svelte/store';
 import type { AuthUser } from '$lib/auth/index.js';
 
-interface AuthState {
+export interface AuthState {
 	user: AuthUser | null;
 	isLoading: boolean;
 	isAuthenticated: boolean;
@@ -24,7 +24,7 @@ const createAuthStore = () => {
 			});
 		},
 		setLoading: (isLoading: boolean) => {
-			update(state => ({ ...state, isLoading }));
+			update((state) => ({ ...state, isLoading }));
 		},
 		logout: () => {
 			set({

@@ -19,26 +19,38 @@ interface FatSecretServing {
 	description: string;
 	url: string;
 	metricServingAmount?: number;
+	metric_serving_amount?: number; // Added snake_case
 	metricServingUnit?: string;
+	metric_serving_unit?: string; // Added snake_case
 	numberOfUnits?: number;
+	number_of_units?: number; // Added snake_case
 	measurementDescription?: string;
+	measurement_description?: string; // Added snake_case
 	calories?: number;
 	carbohydrate?: number;
 	protein?: number;
 	fat?: number;
 	saturatedFat?: number;
+	saturated_fat?: number; // Added snake_case
 	polyunsaturatedFat?: number;
+	polyunsaturated_fat?: number; // Added snake_case
 	monounsaturatedFat?: number;
+	monounsaturated_fat?: number; // Added snake_case
 	transFat?: number;
+	trans_fat?: number; // Added snake_case
 	cholesterol?: number;
 	sodium?: number;
 	potassium?: number;
 	fiber?: number;
 	sugar?: number;
 	addedSugars?: number;
+	added_sugars?: number; // Added snake_case
 	vitaminD?: number;
+	vitamin_d?: number; // Added snake_case
 	vitaminA?: number;
+	vitamin_a?: number; // Added snake_case
 	vitaminC?: number;
+	vitamin_c?: number; // Added snake_case
 	calcium?: number;
 	iron?: number;
 }
@@ -137,8 +149,12 @@ async function getFoodFromFatSecret(foodId: number) {
 async function saveFoodDetailToDatabase(foodData: any) {
 	try {
 		// Handle different response formats
-		let foodId_val, foodName, brandName, foodType, foodUrl;
-		let servings = [];
+		let foodId_val: number = 0;
+		let foodName: string = '';
+		let brandName: string | null = null;
+		let foodType: string = 'Generic';
+		let foodUrl: string = '';
+		let servings: any[] = [];
 
 		// Check if it's the new format (direct object) or old format
 		if (foodData.id && foodData.name) {
@@ -146,7 +162,7 @@ async function saveFoodDetailToDatabase(foodData: any) {
 			foodId_val = typeof foodData.id === 'string' ? parseInt(foodData.id) : foodData.id;
 			foodName = foodData.name;
 			brandName = foodData.brandName || null;
-			foodType = foodData.type || 'Generic';
+			foodType = foodData.type ?? 'Generic';
 			foodUrl = foodData.url || '';
 			servings = foodData.servings || [];
 		} else if (foodData.food_id && foodData.food_name) {
@@ -160,7 +176,7 @@ async function saveFoodDetailToDatabase(foodData: any) {
 		}
 
 		// Save or update food
-		await db.insert(food).values({
+					await db.insert(food).values({
 			foodId: foodId_val,
 			foodName: foodName,
 			brandName: brandName,
@@ -180,38 +196,38 @@ async function saveFoodDetailToDatabase(foodData: any) {
 
 		// Save servings if they exist
 		if (servings.length > 0) {
-			const servingValues = servings.map((srv: any) => {
-				const servingId = srv.id || srv.serving_id;
-				const description = srv.description || srv.serving_description;
-				const url = srv.url || srv.serving_url || '';
+			const servingValues = servings.map((srv: FatSecretServing) => {
+				const servingId = srv.id || (srv as any).serving_id;
+				const description = srv.description || (srv as any).serving_description;
+				const url = srv.url || (srv as any).serving_url || '';
 				
 				return {
 					servingId: typeof servingId === 'string' ? parseInt(servingId) : servingId,
 					foodId: foodId_val,
 					servingDescription: description,
 					servingUrl: url,
-					metricServingAmount: (srv.metricServingAmount || srv.metric_serving_amount)?.toString() || null,
-					metricServingUnit: srv.metricServingUnit || srv.metric_serving_unit || null,
-					numberOfUnits: (srv.numberOfUnits || srv.number_of_units)?.toString() || null,
-					measurementDescription: srv.measurementDescription || srv.measurement_description || null,
+					metricServingAmount: (srv.metricServingAmount || (srv as any).metric_serving_amount)?.toString() || null,
+					metricServingUnit: srv.metricServingUnit || (srv as any).metric_serving_unit || null,
+					numberOfUnits: (srv.numberOfUnits || (srv as any).number_of_units)?.toString() || null,
+					measurementDescription: srv.measurementDescription || (srv as any).measurement_description || null,
 					isDefault: 1, // Mark as default since FatSecret doesn't provide this field
 					calories: srv.calories || null,
 					carbohydrate: srv.carbohydrate || null,
 					protein: srv.protein || null,
 					fat: srv.fat || null,
-					saturatedFat: srv.saturatedFat || srv.saturated_fat || null,
-					polyunsaturatedFat: srv.polyunsaturatedFat || srv.polyunsaturated_fat || null,
-					monounsaturatedFat: srv.monounsaturatedFat || srv.monounsaturated_fat || null,
-					transFat: srv.transFat || srv.trans_fat || null,
+					saturatedFat: srv.saturatedFat || (srv as any).saturated_fat || null,
+					polyunsaturatedFat: srv.polyunsaturatedFat || (srv as any).polyunsaturated_fat || null,
+					monounsaturatedFat: srv.monounsaturatedFat || (srv as any).monounsaturated_fat || null,
+					transFat: srv.transFat || (srv as any).trans_fat || null,
 					cholesterol: srv.cholesterol || null,
 					sodium: srv.sodium || null,
 					potassium: srv.potassium || null,
 					fiber: srv.fiber || null,
 					sugar: srv.sugar || null,
-					addedSugars: srv.addedSugars || srv.added_sugars || null,
-					vitaminD: srv.vitaminD || srv.vitamin_d || null,
-					vitaminA: srv.vitaminA || srv.vitamin_a || null,
-					vitaminC: srv.vitaminC || srv.vitamin_c || null,
+					addedSugars: srv.addedSugars || (srv as any).added_sugars || null,
+					vitaminD: srv.vitaminD || (srv as any).vitamin_d || null,
+					vitaminA: srv.vitaminA || (srv as any).vitamin_a || null,
+					vitaminC: srv.vitaminC || (srv as any).vitamin_c || null,
 					calcium: srv.calcium || null,
 					iron: srv.iron || null
 				};
@@ -253,8 +269,12 @@ export const GET: RequestHandler = async ({ params }) => {
 				}
 
 				// Handle different response formats
-				let foodId_val, foodName, brandName, foodType, foodUrl;
-				let servings = [];
+				let foodId_val: number = 0;
+				let foodName: string = '';
+				let brandName: string | null = null;
+				let foodType: string = 'Generic';
+		let foodUrl: string = '';
+				let servings: any[] = [];
 
 				// Check if it's the new format (direct object) or old format
 				if (externalFoodData.id && externalFoodData.name) {
@@ -262,7 +282,7 @@ export const GET: RequestHandler = async ({ params }) => {
 					foodId_val = typeof externalFoodData.id === 'string' ? parseInt(externalFoodData.id) : externalFoodData.id;
 					foodName = externalFoodData.name;
 					brandName = externalFoodData.brandName || null;
-					foodType = externalFoodData.type || 'Generic';
+					foodType = externalFoodData.type ?? 'Generic';
 					foodUrl = externalFoodData.url || '';
 					servings = externalFoodData.servings || [];
 				} else if (externalFoodData.food_id && externalFoodData.food_name) {
@@ -280,8 +300,8 @@ export const GET: RequestHandler = async ({ params }) => {
 					foodId: foodId_val,
 					foodName: foodName,
 					brandName: brandName,
-					foodType: foodType,
-					foodUrl: foodUrl,
+					foodType: (foodType ?? 'Generic') as string,
+					foodUrl: (foodUrl ?? '') as string,
 					foodSubCategories: null
 				};
 

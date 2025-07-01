@@ -7,14 +7,16 @@ export const user = sqliteTable('user', {
 	email: text('email').unique().notNull(),
 	password: text('password').notNull(),
 	name: text('name'),
-	createdAt: text('created_at').default(sql`(CURRENT_TIMESTAMP)`),
+	createdAt: text('created_at').default(sql`(CURRENT_TIMESTAMP)`)
 });
 
 // Session table for auth
 export const session = sqliteTable('session', {
 	id: text('id').primaryKey(),
-	userId: integer('user_id').notNull().references(() => user.id),
-	expiresAt: integer('expires_at').notNull(),
+	userId: integer('user_id')
+		.notNull()
+		.references(() => user.id),
+	expiresAt: integer('expires_at').notNull()
 });
 
 // Food table
@@ -24,13 +26,15 @@ export const food = sqliteTable('food', {
 	brandName: text('brand_name'),
 	foodType: text('food_type').notNull(),
 	foodUrl: text('food_url').notNull(),
-	foodSubCategories: text('food_sub_categories'),
+	foodSubCategories: text('food_sub_categories')
 });
 
 // Serving table with comprehensive nutrition data
 export const serving = sqliteTable('serving', {
 	servingId: integer('serving_id').primaryKey(),
-	foodId: integer('food_id').notNull().references(() => food.foodId),
+	foodId: integer('food_id')
+		.notNull()
+		.references(() => food.foodId),
 	servingDescription: text('serving_description').notNull(),
 	servingUrl: text('serving_url').notNull(),
 	metricServingAmount: text('metric_serving_amount'),
@@ -56,18 +60,25 @@ export const serving = sqliteTable('serving', {
 	vitaminA: real('vitamin_a'),
 	vitaminC: real('vitamin_c'),
 	calcium: real('calcium'),
-	iron: real('iron'),
+	iron: real('iron')
 });
 
 // Food log table to track what users eat
 export const foodLog = sqliteTable('food_log', {
 	id: integer('id').primaryKey({ autoIncrement: true }),
-	userId: integer('user_id').notNull().references(() => user.id),
-	foodId: integer('food_id').notNull().references(() => food.foodId),
-	servingId: integer('serving_id').notNull().references(() => serving.servingId),
+	userId: integer('user_id')
+		.notNull()
+		.references(() => user.id),
+	foodId: integer('food_id')
+		.notNull()
+		.references(() => food.foodId),
+	servingId: integer('serving_id')
+		.notNull()
+		.references(() => serving.servingId),
 	quantity: real('quantity').notNull().default(1),
 	loggedAt: text('logged_at').default(sql`(CURRENT_TIMESTAMP)`),
 	date: text('date').notNull(), // Date in YYYY-MM-DD format for easier querying
+	meal: text('meal') // breakfast, lunch, dinner, snacks
 });
 
 // Types for TypeScript
