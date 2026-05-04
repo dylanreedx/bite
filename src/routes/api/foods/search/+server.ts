@@ -180,12 +180,15 @@ async function searchFatSecretFoods(
 	}
 
 	try {
-		const response = await fetch(
-			`${PROXY_URL}/search?q=${encodeURIComponent(query)}&max_results=${limit}`
-		);
+		const searchUrl = `${PROXY_URL}/search?q=${encodeURIComponent(query)}&max_results=${limit}`;
+		console.log(`[FatSecret] Searching URL: ${searchUrl}`);
+
+		const response = await fetch(searchUrl);
 
 		if (!response.ok) {
 			console.error(`FatSecret proxy error: ${response.status} ${response.statusText}`);
+			const errorText = await response.text();
+			console.error(`FatSecret proxy error response: ${errorText}`);
 			return [];
 		}
 
@@ -289,15 +292,95 @@ export const GET: RequestHandler = async ({ url }) => {
 		});
 	}
 
+	// Special debug query to test proxy connection
+	if (searchQuery === 'test_connection_debug') {
+		console.log(`[DEBUG] Proxy connection test - PROXY_URL: ${PROXY_URL}`);
+		console.log(`[DEBUG] Proxy configured: ${!!PROXY_URL}`);
+
+		if (!PROXY_URL) {
+			console.error('[DEBUG] ❌ FATSECRET_PROXY_URL environment variable not set');
+			return json({
+				success: false,
+				error: 'FATSECRET_PROXY_URL not configured',
+				debug: {
+					proxyUrl: null,
+					configured: false
+				}
+			});
+		}
+
+		try {
+			const testUrl = `${PROXY_URL}/search?q=apple&max_results=1`;
+			console.log(`[DEBUG] Testing proxy with: ${testUrl}`);
+
+			const response = await fetch(testUrl);
+			console.log(`[DEBUG] Proxy response: ${response.status} ${response.statusText}`);
+
+			if (response.ok) {
+				const data = await response.json();
+				console.log(`[DEBUG] ✅ Proxy connection successful`);
+				return json({
+					success: true,
+					foods: [],
+					debug: {
+						proxyUrl: PROXY_URL,
+						configured: true,
+						connectionTest: 'success',
+						responseKeys: Object.keys(data)
+					}
+				});
+			} else {
+				console.log(`[DEBUG] ❌ Proxy connection failed: ${response.status}`);
+				return json({
+					success: false,
+					error: `Proxy connection failed: ${response.status}`,
+					debug: {
+						proxyUrl: PROXY_URL,
+						configured: true,
+						connectionTest: 'failed',
+						statusCode: response.status
+					}
+				});
+			}
+		} catch (error) {
+			console.error(`[DEBUG] ❌ Proxy connection error:`, error);
+			return json({
+				success: false,
+				error: `Proxy connection error: ${error.message}`,
+				debug: {
+					proxyUrl: PROXY_URL,
+					configured: true,
+					connectionTest: 'error',
+					errorMessage: error.message
+				}
+			});
+		}
+	}
+
 	try {
 		console.log(`[Food Search] Searching for: "${searchQuery}"`);
+		console.log(`[Food Search] PROXY_URL configured: ${!!PROXY_URL}`);
+		if (!PROXY_URL) {
+			console.warn(`[Food Search] ⚠️  FATSECRET_PROXY_URL not set - external search disabled`);
+		} else {
+			console.log(`[Food Search] PROXY_URL: ${PROXY_URL.substring(0, 50)}...`);
+		}
+		console.log(`[Food Search] Limit: ${limit}`);
 
 		// Step 1: Search local database first
 		const localResults = await searchLocalFoods(searchQuery, limit);
 		console.log(`[Food Search] Found ${localResults.length} local results`);
 
+		// Log sample local results
+		if (localResults.length > 0) {
+			console.log(`[Food Search] Sample local result:`, JSON.stringify(localResults[0], null, 2));
+		}
+
 		// Step 2: If we have sufficient local results, return them
 		if (localResults.length >= 5) {
+			console.log(
+				`[Food Search] Sufficient local results found, returning without external search`
+			);
 			return json({
 				success: true,
 				foods: localResults,
@@ -311,8 +394,19 @@ export const GET: RequestHandler = async ({ url }) => {
 
 		// Step 3: Search FatSecret proxy for more results
 		console.log(`[Food Search] Searching FatSecret proxy for additional results...`);
+		if (!PROXY_URL) {
+			console.log(`[Food Search] ⚠️  Skipping external search - proxy not configured`);
+		}
 		const externalResults = await searchFatSecretFoods(searchQuery, limit);
 		console.log(`[Food Search] Found ${externalResults.length} external results`);
+
+		// Log sample external results
+		if (externalResults.length > 0) {
+			console.log(
+				`[Food Search] Sample external result:`,
+				JSON.stringify(externalResults[0], null, 2)
+			);
+		}
 
 		// Step 4: Save ALL external results to database immediately
 		if (externalResults.length > 0) {
@@ -327,11 +421,13 @@ export const GET: RequestHandler = async ({ url }) => {
 
 		// Step 5: Combine results, prioritizing local first
 		const allResults = [...localResults, ...externalResults];
+		console.log(`[Food Search] Combined results: ${allResults.length} total`);
 
 		// Step 6: Remove duplicates (favor local results)
 		const uniqueResults = allResults.filter(
 			(item, index, self) => index === self.findIndex((t) => t.foodId === item.foodId)
 		);
+		console.log(`[Food Search] After deduplication: ${uniqueResults.length} unique results`);
 
 		// Step 7: Sort by source (local first) then alphabetically
 		uniqueResults.sort((a, b) => {
@@ -344,7 +440,7 @@ export const GET: RequestHandler = async ({ url }) => {
 			`[Food Search] Returning ${uniqueResults.length} total results (${localResults.length} local, ${externalResults.length} external)`
 		);
 
-		return json({
+		const response = {
 			success: true,
 			foods: uniqueResults.slice(0, limit),
 			total: uniqueResults.length,
@@ -352,14 +448,36 @@ export const GET: RequestHandler = async ({ url }) => {
 				local: localResults.length,
 				external: externalResults.length
 			}
+		};
+
+		console.log(`[Food Search] Final response structure:`, {
+			success: response.success,
+			foodCount: response.foods.length,
+			total: response.total,
+			sources: response.sources,
+			firstFoodSample: response.foods[0]
+				? {
+						foodId: response.foods[0].foodId,
+						foodName: response.foods[0].foodName,
+						source: response.foods[0].source,
+						hasNutrition: !!(response.foods[0].calories || response.foods[0].protein)
+					}
+				: null
 		});
+
+		return json(response);
 	} catch (error) {
-		console.error('Food search error:', error);
+		console.error('[Food Search] ❌ Search error:', error);
 		return json(
 			{
 				success: false,
 				error: 'Failed to search foods',
-				foods: []
+				foods: [],
+				debug: {
+					proxyConfigured: !!PROXY_URL,
+					searchQuery: searchQuery,
+					errorMessage: error.message
+				}
 			},
 			{ status: 500 }
 		);

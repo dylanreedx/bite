@@ -1,6 +1,7 @@
 import { writable, derived, type Writable, type Readable } from 'svelte/store';
 import { authStore } from './auth';
 import { get } from 'svelte/store';
+import { foodSyncService } from '$lib/services/foodSyncService';
 import type {
 	FoodSearchResult,
 	FoodDetails,
@@ -139,13 +140,31 @@ function createFoodStore() {
 		searchCache.clear();
 	}
 
-	// Get food details with caching
-	async function getFoodDetails(foodId: number): Promise<FoodDetails> {
+	// Get food details with caching and async sync
+	async function getFoodDetails(
+		foodId: number,
+		priority: 'high' | 'medium' | 'low' = 'medium'
+	): Promise<FoodDetails> {
 		const cache = get(foodDetailsCache);
 
 		// Return cached result if available
 		if (cache.has(foodId)) {
-			return cache.get(foodId)!;
+			const cached = cache.get(foodId)!;
+
+			// Check if cached data needs nutrition sync
+			const needsSync = !cached.servings?.some(
+				(serving) =>
+					serving.calories > 0 || serving.protein > 0 || serving.carbohydrate > 0 || serving.fat > 0
+			);
+
+			if (needsSync) {
+				// Queue for background sync but return cached data immediately
+				foodSyncService
+					.queueFoodSync(foodId, 'low')
+					.catch((error) => console.warn('Background sync failed:', error));
+			}
+
+			return cached;
 		}
 
 		try {
@@ -156,6 +175,24 @@ function createFoodStore() {
 				// Cache the result
 				cache.set(foodId, data.food);
 				foodDetailsCache.set(cache);
+
+				// Check if nutrition data is missing and queue for sync
+				const hasNutrition = data.food.servings?.some(
+					(serving) =>
+						serving.calories > 0 ||
+						serving.protein > 0 ||
+						serving.carbohydrate > 0 ||
+						serving.fat > 0
+				);
+
+				if (!hasNutrition) {
+					console.log(`Food ${foodId} missing nutrition data, queuing for sync`);
+					// Queue for sync with the requested priority
+					foodSyncService
+						.queueFoodSync(foodId, priority)
+						.catch((error) => console.warn('Failed to queue food for sync:', error));
+				}
+
 				return data.food;
 			} else {
 				throw new Error(data.error || 'Failed to get food details');
@@ -316,6 +353,23 @@ function createFoodStore() {
 			console.log('Food logging response:', JSON.stringify(data, null, 2));
 
 			if (data.success && data.logEntry) {
+				// Check if the logged entry has missing nutrition data
+				const hasNutrition =
+					data.logEntry.nutrition.calories > 0 ||
+					data.logEntry.nutrition.protein > 0 ||
+					data.logEntry.nutrition.carbohydrate > 0 ||
+					data.logEntry.nutrition.fat > 0;
+
+				if (!hasNutrition) {
+					console.log(
+						`Logged food ${foodId} missing nutrition data, queuing for high-priority sync`
+					);
+					// Queue for immediate sync since user just logged this food
+					foodSyncService
+						.queueFoodSync(foodId, 'high')
+						.catch((error) => console.warn('Failed to queue logged food for sync:', error));
+				}
+
 				// Add to today's log if logging for today
 				const logDate = date || get(selectedDate);
 				const today = new Date().toISOString().split('T')[0];
@@ -438,6 +492,40 @@ function createFoodStore() {
 		}
 	}
 
+	// Sync foods with missing nutrition data
+	async function syncMissingNutrition(limit: number = 50): Promise<void> {
+		try {
+			const response = await fetch(`/api/foods/missing-nutrition?limit=${limit}&type=both`);
+			if (response.ok) {
+				const data = await response.json();
+				if (data.success && data.foodIds?.length > 0) {
+					console.log(`Queuing ${data.foodIds.length} foods with missing nutrition for sync`);
+					await foodSyncService.queueMultipleFoods(data.foodIds, 'medium');
+				}
+			}
+		} catch (error) {
+			console.error('Error syncing foods with missing nutrition:', error);
+		}
+	}
+
+	// Get sync service status
+	function getSyncStatus() {
+		return foodSyncService.status;
+	}
+
+	// Queue specific food for sync
+	async function queueFoodForSync(
+		foodId: number,
+		priority: 'high' | 'medium' | 'low' = 'medium'
+	): Promise<boolean> {
+		try {
+			return await foodSyncService.queueFoodSync(foodId, priority);
+		} catch (error) {
+			console.error('Error queuing food for sync:', error);
+			return false;
+		}
+	}
+
 	// Clear all data (for logout)
 	function clear(): void {
 		searchResults.set([]);
@@ -458,6 +546,8 @@ function createFoodStore() {
 		foodDetailsCache.set(new Map());
 		logError.set(null);
 		searchCache.clear();
+		// Clear sync queue on logout
+		foodSyncService.clearQueue();
 	}
 
 	// Derived stores
@@ -503,7 +593,10 @@ function createFoodStore() {
 		deleteLogEntry,
 		setSelectedDate,
 		initialize,
-		clear
+		clear,
+		syncMissingNutrition,
+		getSyncStatus,
+		queueFoodForSync
 	};
 }
 

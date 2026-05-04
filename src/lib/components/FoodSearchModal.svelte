@@ -4,6 +4,7 @@
 	import { quintOut } from 'svelte/easing';
 	import { X } from 'lucide-svelte';
 	import FoodSearch from './FoodSearch.svelte';
+	import FoodSyncStatus from './FoodSyncStatus.svelte';
 	import type { FoodSearchResult } from '$lib/types/food';
 
 	// Props
@@ -132,6 +133,9 @@
 			</div>
 		</div>
 	</div>
+
+	<!-- Sync Status Component -->
+	<FoodSyncStatus position="bottom-right" autoHide={true} />
 {/if}
 
 <style>

@@ -4,6 +4,7 @@
 	import Drawer from '$lib/components/drawer.svelte';
 	import FoodLogEditModal from '$lib/components/FoodLogEditModal.svelte';
 	import FoodSearchModal from '$lib/components/FoodSearchModal.svelte';
+	import FoodDebugModal from '$lib/components/FoodDebugModal.svelte';
 	import type { FoodDetails, RecentFood, FoodSearchResult } from '$lib/types/food';
 	import type { AuthUser } from '$lib/auth/index.js';
 	import { page } from '$app/stores';
@@ -17,12 +18,13 @@
 	let isInitializing = $state(true);
 	let showFoodLogEditModal = $state(false);
 	let showGlobalSearchModal = $state(false);
+	let showDebugModal = $state(false);
 	let foodToEdit: FoodDetails | null = $state(null);
 	let editingEntry: any = $state(null);
 
 	// Handle mobile modal body scroll lock
 	$effect(() => {
-		if (showFoodLogEditModal || showGlobalSearchModal) {
+		if (showFoodLogEditModal || showGlobalSearchModal || showDebugModal) {
 			document.body.classList.add('modal-open');
 		} else {
 			document.body.classList.remove('modal-open');
@@ -198,6 +200,13 @@
 					Welcome, {currentUser?.name || currentUser?.email}
 				</span>
 				<button
+					onclick={() => (showDebugModal = true)}
+					class="flex items-center gap-2 rounded-lg border border-orange-600 bg-orange-600/20 px-3 py-2 text-sm text-orange-300 transition-colors hover:bg-orange-600/30 hover:text-orange-200"
+					title="Debug Food Fetching"
+				>
+					🔧
+				</button>
+				<button
 					onclick={handleLogout}
 					disabled={isLoading}
 					class="flex items-center gap-2 rounded-lg border border-neutral-700 bg-neutral-800 px-3 py-2 text-sm text-neutral-300 transition-colors hover:bg-neutral-700 hover:text-neutral-100 disabled:opacity-50"
@@ -361,3 +370,6 @@
 	on:close={handleFoodLogModalClose}
 	on:save={handleFoodLogModalSave}
 />
+
+<!-- Debug Modal -->
+<FoodDebugModal bind:open={showDebugModal} on:close={() => (showDebugModal = false)} />

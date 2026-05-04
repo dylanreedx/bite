@@ -113,7 +113,9 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			return json(
 				{
 					success: false,
-					error: 'Serving not found for this food'
+					error: 'Serving not found for this food',
+					needsSync: true,
+					foodId: foodId
 				},
 				{ status: 404 }
 			);
@@ -195,6 +197,13 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			cholesterol: (loggedFoodWithNutrition.cholesterol ?? 0) * quantity
 		};
 
+		// Check if nutrition data is missing or incomplete
+		const hasNutrition =
+			nutritionData.calories > 0 ||
+			nutritionData.protein > 0 ||
+			nutritionData.carbohydrate > 0 ||
+			nutritionData.fat > 0;
+
 		return json({
 			success: true,
 			logEntry: {
@@ -228,7 +237,9 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				},
 				// Calculated nutrition for the logged quantity
 				nutrition: nutritionData
-			}
+			},
+			// Indicate if nutrition data needs syncing
+			needsNutritionSync: !hasNutrition
 		});
 	} catch (error) {
 		console.error('Error logging food:', error);

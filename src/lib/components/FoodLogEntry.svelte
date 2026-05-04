@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { createEventDispatcher } from 'svelte';
-	import { MoreVertical, Edit3, Trash2, Copy, Clock } from 'lucide-svelte';
+	import { MoreVertical, Edit3, Trash2, Copy, Clock, Loader2, AlertCircle } from 'lucide-svelte';
 	import { foodStore } from '$lib/stores/food';
 	import type { FoodLogEntry } from '$lib/types/food';
 
@@ -38,6 +38,25 @@
 			unsubscribe();
 		};
 	});
+
+	// Check if nutrition data is missing
+	function hasNutritionData(): boolean {
+		return (
+			(entry.nutrition.calories && entry.nutrition.calories > 0) ||
+			(entry.nutrition.protein && entry.nutrition.protein > 0) ||
+			(entry.nutrition.carbohydrate && entry.nutrition.carbohydrate > 0) ||
+			(entry.nutrition.fat && entry.nutrition.fat > 0)
+		);
+	}
+
+	// Queue food for sync when nutrition is missing
+	async function handleSyncNutrition() {
+		try {
+			await foodStore.queueFoodForSync(entry.foodId, 'high');
+		} catch (error) {
+			console.error('Failed to queue food for sync:', error);
+		}
+	}
 
 	function formatTime(dateString: string): string {
 		const date = new Date(dateString);
@@ -158,7 +177,7 @@
 					</div>
 				{/if}
 				<div class="flex items-center gap-4">
-					{#if entry.nutrition.calories || entry.nutrition.protein || entry.nutrition.carbohydrate || entry.nutrition.fat}
+					{#if hasNutritionData()}
 						{#if entry.nutrition.calories}
 							<span class="text-orange-400">{formatNutrition(entry.nutrition.calories)} cal</span>
 						{/if}
@@ -173,7 +192,17 @@
 							<span class="text-green-400">{formatNutrition(entry.nutrition.fat)}g F</span>
 						{/if}
 					{:else}
-						<span class="text-xs text-neutral-500 italic">Nutrition data being processed...</span>
+						<div class="flex items-center gap-2">
+							<span class="text-xs text-neutral-500 italic">Nutrition data missing</span>
+							<button
+								onclick={handleSyncNutrition}
+								class="flex items-center gap-1 rounded bg-blue-600/20 px-2 py-1 text-xs text-blue-400 hover:bg-blue-600/30"
+								title="Queue for nutrition sync"
+							>
+								<Loader2 class="h-3 w-3" />
+								Sync
+							</button>
+						</div>
 					{/if}
 				</div>
 			</div>

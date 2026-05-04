@@ -14,7 +14,12 @@
 		"lint": "prettier --check . && eslint .",
 		"db:push": "drizzle-kit push",
 		"db:migrate": "drizzle-kit migrate",
-		"db:studio": "drizzle-kit studio"
+		"db:studio": "drizzle-kit studio",
+		"sync-servings": "tsx scripts/sync-food-servings.ts",
+		"sync-servings:test": "SYNC_MAX_FOODS=10 SYNC_DELAY_MS=500 tsx scripts/sync-food-servings.ts",
+		"sync-servings:batch": "SYNC_BATCH_SIZE=20 SYNC_MAX_FOODS=100 tsx scripts/sync-food-servings.ts",
+		"sync-servings:fast": "SYNC_DELAY_MS=250 tsx scripts/sync-food-servings.ts",
+		"inspect-foods": "tsx scripts/inspect-foods.ts"
 	},
 	"devDependencies": {
 		"@eslint/compat": "^1.2.5",
@@ -24,6 +29,7 @@
 		"@sveltejs/vite-plugin-svelte": "^5.0.0",
 		"@tailwindcss/vite": "^4.0.0",
 		"@types/node": "^22",
+		"dotenv": "^17.0.1",
 		"drizzle-kit": "^0.30.2",
 		"eslint": "^9.18.0",
 		"eslint-config-prettier": "^10.0.1",
@@ -35,6 +41,7 @@
 		"svelte": "^5.0.0",
 		"svelte-check": "^4.0.0",
 		"tailwindcss": "^4.0.0",
+		"tsx": "^4.20.3",
 		"typescript": "^5.0.0",
 		"typescript-eslint": "^8.20.0",
 		"vite": "^6.2.6"
